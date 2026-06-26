@@ -1,0 +1,6 @@
+acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/03b70ccc823e5dc64fbda0ccabb28b41031d76e7.zip
+agent-framework>=1.2.2,<1.3
+agent-framework-foundry>=1.2.2,<1.3
+agent-framework-foundry-hosting
+azure-containerapps-sandbox>=0.1.0b2,<0.2
+python-dotenv>=1.0

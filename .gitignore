@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# uv / venv
+.venv/
+venv/
+
+# azd local state (env values, credentials, deployment history)
+.azure/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# Local teardown logs (may contain env backups with secrets)
+.cleanup-log/

@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml
+#
+# Foundry Hosted Agent deployment spec.
+#
+# The ${...} placeholders are substituted by `azd` at deploy time from the
+# active azd environment's `.env` file (which Bicep outputs populate during
+# `azd up`). See infra/main.bicep for the source of each value.
+
+kind: hosted
+name: fha-acas-codeact
+description: |
+    CodeAct hosted agent for FHA. Routes execute_code and run_shell tool
+    calls through the ACAS toolkit into an Azure Container Apps Sandbox.
+metadata:
+    tags:
+        - Agent Framework
+        - FHA
+        - Responses Protocol
+        - CodeAct
+protocols:
+    - protocol: responses
+      version: 1.0.0
+resources:
+    cpu: "0.5"
+    memory: 1Gi
+environment_variables:
+    - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+      value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+    - name: ACAS_SUBSCRIPTION_ID
+      value: ${ACAS_SUBSCRIPTION_ID}
+    - name: ACAS_RESOURCE_GROUP
+      value: ${ACAS_RESOURCE_GROUP}
+    - name: ACAS_SANDBOX_GROUP
+      value: ${ACAS_SANDBOX_GROUP}
+    - name: ACAS_LOCATION
+      value: ${ACAS_LOCATION}
+    - name: ACAS_DISK
+      value: ${ACAS_DISK}
+    - name: ACAS_LEASE_TIMEOUT_S
+      value: "120"
+    # ─────────────────────────────────────────────────────────────────
+    # Telemetry: nothing to declare here.
+    #
+    # APPLICATIONINSIGHTS_CONNECTION_STRING is a PLATFORM-RESERVED env
+    # var — Foundry rejects manifests that try to set it. Instead,
+    # infra/modules/foundry.bicep links the project's Application
+    # Insights component as a 'AppInsights' project connection, and the
+    # platform then automatically injects the connection string into
+    # this container at boot AND configures the OpenTelemetry exporter
+    # inside ResponsesHostServer. Confirmed by:
+    #   * working agents in the parent foundry-hosted-agents/manifests/
+    #     emit telemetry to App Insights without any application code,
+    #   * agent_framework_foundry/_chat_client.py::configure_azure_monitor
+    #     (the runtime entry point Foundry uses) reads the connection
+    #     string from the project's telemetry sub-resource, not from a
+    #     user-declared env var.
+    # If you ever need to override or disable, do it via the project
+    # connection in Bicep — not by adding env vars here.
+    # ─────────────────────────────────────────────────────────────────

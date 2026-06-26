@@ -1,0 +1,23 @@
+# Keep the container image lean: only ship what `main.py` actually needs
+# at runtime. Everything below is excluded from the build context.
+
+# Lock & source-truth files (we install from the lock, not the txt)
+requirements.txt
+
+# Local dev artifacts
+.env
+.env.*
+*.pyc
+__pycache__/
+.venv/
+
+# Editor / OS noise
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Tests, docs, and CI in the agent dir (none expected, but be defensive)
+tests/
+docs/
+*.md

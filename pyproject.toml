@@ -1,0 +1,28 @@
+[project]
+name = "fha-acas-codeact"
+version = "0.1.0"
+description = "Standalone FHA + ACAS CodeAct sample: a Foundry Hosted Agent that executes Python code in an Azure Container Apps Sandbox."
+requires-python = ">=3.12"
+readme = "README.md"
+license = { text = "MIT" }
+
+# Host-side dependencies. These are ONLY used by the orchestrator script
+# in `scripts/` that you run from your laptop to invoke the deployed agent.
+# The container that runs inside the FHA microVM has its own separate
+# dependency set in `agent/requirements.txt` / `agent/requirements.lock`.
+dependencies = [
+    "azure-containerapps-sandbox>=0.1.0b2,<0.2",
+    "azure-identity>=1.25.3",
+    # Used by scripts/query_appinsights.py to read the Log Analytics
+    # workspace that backs the project's Application Insights, and verify
+    # the agent's OTel exporter is shipping data.
+    "azure-monitor-query>=1.4",
+    "httpx>=0.28.1,<1.0",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+# `azure-containerapps-sandbox` is currently a preview package on PyPI;
+# scope the pre-release allowance to that package only so we don't
+# accidentally pull dev releases of httpx / azure-identity / etc.
+prerelease = "if-necessary-or-explicit"

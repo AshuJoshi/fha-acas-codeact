@@ -1,0 +1,9 @@
+# Files that `azd` should not upload to Foundry as part of the agent
+# package, beyond what the container build itself excludes. This is the
+# FHA-specific complement to .dockerignore.
+
+.env
+.env.*
+.venv/
+__pycache__/
+*.pyc
