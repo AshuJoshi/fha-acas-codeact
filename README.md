@@ -64,12 +64,9 @@ troubleshooting.
 ## Invoke the deployed agent
 
 After `azd up` completes, the post-deploy hook writes the agent endpoint
-into `.azure/<env>/.env`. Load it and run the orchestrator:
+into `.azure/<env>/.env`. The orchestrator loads it automatically:
 
 ```bash
-# Pull the deployed values into your shell
-source .azure/$(azd env get-value AZURE_ENV_NAME)/.env
-
 # Sync the host-side venv (uv reads pyproject.toml + uv.lock)
 uv sync
 
@@ -77,6 +74,13 @@ uv sync
 uv run python scripts/orchestrate_codeact.py \
     "compute the first 20 fibonacci numbers"
 ```
+
+> **No manual `source` step needed.** `scripts/orchestrate_codeact.py`
+> auto-discovers the active azd environment (via `AZURE_ENV_NAME` or the
+> `defaultEnvironment` in `.azure/config.json`) and loads its `.env`
+> without overriding anything you've already exported. See
+> [docs/deploy.md](docs/deploy.md#3-first-invocation) for details and how
+> to source manually for the other `scripts/*.py` if you need to.
 
 Expected output: the assistant reports running Python in the sandbox and
 prints the list `[0, 1, 1, 2, 3, ..., 4181]`.

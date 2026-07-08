@@ -206,9 +206,6 @@ needed.
 ## 3. First invocation
 
 ```bash
-# Load endpoint + sandbox group coordinates into your shell
-source .azure/$(azd env get-value AZURE_ENV_NAME)/.env
-
 # Sync the host-side venv
 uv sync
 
@@ -216,6 +213,22 @@ uv sync
 uv run python scripts/orchestrate_codeact.py \
     "compute the first 20 fibonacci numbers"
 ```
+
+> **No `source` needed.** [`scripts/orchestrate_codeact.py`](../scripts/orchestrate_codeact.py)
+> auto-loads the active azd environment's `.env`. It resolves the current
+> environment dynamically — using `AZURE_ENV_NAME` if exported, otherwise
+> the `defaultEnvironment` field in `.azure/config.json` (the same value
+> `azd` uses) — then loads `.azure/<env>/.env` with `override=False`, so any
+> already-exported variable or an explicit `--endpoint` flag still wins. No
+> environment name is hard-coded, and switching envs with `azd env select`
+> is picked up automatically on the next run.
+>
+> The reason the manual `source` step used to be required (and could still
+> be needed for the other `scripts/*.py`): azd's `.env` uses bare
+> `KEY="value"` lines with no `export`, so `source`-ing them in `zsh`/`bash`
+> creates *shell* variables that child processes like `uv run` never
+> inherit. If you do source manually for those scripts, use auto-export:
+> `set -a; source .azure/$(azd env get-value AZURE_ENV_NAME)/.env; set +a`.
 
 Expected output (on stderr):
 ```
@@ -269,6 +282,41 @@ az cognitiveservices account purge \
 ```
 
 ## Troubleshooting
+
+### `azd up` fails validation with `InvalidDeployment: The 'location' property must be specified`
+
+Full error:
+
+```
+Validation Error Details:
+InvalidDeployment: The 'location' property must be specified for '<env>-<n>'.
+```
+
+`infra/main.bicep` is **subscription-scope** (`targetScope = 'subscription'`),
+and every subscription-level deployment must carry its own `location` — this
+is where ARM stores the deployment metadata, independent of the resource
+group's location. `azd` sources that value from the `AZURE_LOCATION`
+environment variable stored in `.azure/<env>/.env`.
+
+`.azure/` is `.gitignore`d, so a **fresh clone has no saved location**.
+Normally `azd` prompts you for one, but if the parameter file supplies an
+inline default (e.g. `${AZURE_LOCATION=westus2}`) `azd` treats the input as
+satisfied, skips the prompt, and leaves `AZURE_LOCATION` unset — so the
+subscription deployment has no location and validation fails.
+
+[`infra/main.parameters.json`](../infra/main.parameters.json) therefore uses
+`"location": { "value": "${AZURE_LOCATION}" }` (no inline default), so `azd`
+always prompts on a fresh environment and persists the choice. If you hit
+this error on an environment that already exists (created before this fix,
+or imported), set the value once and re-run:
+
+```bash
+azd env set AZURE_LOCATION westus2
+azd up
+```
+
+The region is stored per-environment in `.azure/<env>/.env` (machine-local,
+never committed) — it is not hard-coded anywhere in the repo.
 
 ### Build fails with `ResolutionTooDeep: 200000`
 

@@ -54,10 +54,12 @@ Examples
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -65,7 +67,50 @@ from azure.identity import DefaultAzureCredential
 from azure.containerapps.sandbox import SandboxGroupClient
 from dotenv import load_dotenv
 
-load_dotenv()
+
+def _load_azd_env() -> None:
+    """Populate os.environ from the active azd environment's .env file.
+
+    Discovery is fully dynamic — no environment name is hard-coded:
+
+    1. A plain ``.env`` in the current working directory (if present).
+    2. The azd environment's ``.azure/<env>/.env`` file, where ``<env>`` is
+       resolved from ``AZURE_ENV_NAME`` if exported, otherwise from the
+       ``defaultEnvironment`` field in ``.azure/config.json``.
+
+    Existing (already-exported) environment variables always win, so an
+    explicit ``export`` or ``--endpoint`` still overrides these values.
+    This removes the need to ``source .azure/<env>/.env`` before running.
+    """
+    # 1. Local .env in the current working directory (backwards compatible).
+    load_dotenv()
+
+    # 2. Locate the azd project root by walking up for a `.azure` directory.
+    repo_root = Path(__file__).resolve().parent.parent
+    azure_dir = repo_root / ".azure"
+    if not azure_dir.is_dir():
+        return
+
+    env_name = os.environ.get("AZURE_ENV_NAME")
+    if not env_name:
+        config_path = azure_dir / "config.json"
+        if config_path.is_file():
+            try:
+                env_name = json.loads(config_path.read_text()).get(
+                    "defaultEnvironment"
+                )
+            except (json.JSONDecodeError, OSError):
+                env_name = None
+    if not env_name:
+        return
+
+    env_file = azure_dir / env_name / ".env"
+    if env_file.is_file():
+        # override=False → real exported vars and local .env take precedence.
+        load_dotenv(env_file, override=False)
+
+
+_load_azd_env()
 
 # Defaults that are safe to bake in (don't reference any specific tenant).
 DEFAULT_REGION = "westus2"
