@@ -5,11 +5,12 @@ After running a timing probe, use this to verify that
 spans, traces, and logs to the project's App Insights workspace.
 
 Reads ``AZURE_LOG_ANALYTICS_WORKSPACE_CUSTOMER_ID`` from the environment
-(written by Bicep into ``.azure/<env>/.env`` — load it with
-``set -a; source .azure/fha-acas-codeact-dev/.env; set +a``). This is the
-Log Analytics workspace's GUID (its ``customerId`` property), which is
-what ``LogsQueryClient.query_workspace`` expects — NOT the full ARM
-resource id ``/subscriptions/.../workspaces/<name>``.
+(written by Bicep into ``.azure/<env>/.env``). The active azd environment's
+``.env`` is auto-loaded on import — no manual ``source`` step needed — so
+this works from a fresh terminal. This is the Log Analytics workspace's GUID
+(its ``customerId`` property), which is what ``LogsQueryClient.query_workspace``
+expects — NOT the full ARM resource id
+``/subscriptions/.../workspaces/<name>``.
 
 Usage
 -----
@@ -34,9 +35,54 @@ import json
 import os
 import sys
 from datetime import timedelta
+from pathlib import Path
 
 from azure.identity import DefaultAzureCredential
 from azure.monitor.query import LogsQueryClient, LogsQueryStatus
+from dotenv import load_dotenv
+
+
+def _load_azd_env() -> None:
+    """Populate os.environ from the active azd environment's .env file.
+
+    Discovery is fully dynamic — no environment name is hard-coded:
+
+    1. A plain ``.env`` in the current working directory (if present).
+    2. The azd environment's ``.azure/<env>/.env`` file, where ``<env>`` is
+       resolved from ``AZURE_ENV_NAME`` if exported, otherwise from the
+       ``defaultEnvironment`` field in ``.azure/config.json``.
+
+    Existing (already-exported) environment variables always win, so an
+    explicit ``export`` still overrides these values. This removes the need
+    to ``source .azure/<env>/.env`` before running.
+    """
+    load_dotenv()
+
+    repo_root = Path(__file__).resolve().parent.parent
+    azure_dir = repo_root / ".azure"
+    if not azure_dir.is_dir():
+        return
+
+    env_name = os.environ.get("AZURE_ENV_NAME")
+    if not env_name:
+        config_path = azure_dir / "config.json"
+        if config_path.is_file():
+            try:
+                env_name = json.loads(config_path.read_text()).get(
+                    "defaultEnvironment"
+                )
+            except (json.JSONDecodeError, OSError):
+                env_name = None
+    if not env_name:
+        return
+
+    env_file = azure_dir / env_name / ".env"
+    if env_file.is_file():
+        # override=False → real exported vars take precedence.
+        load_dotenv(env_file, override=False)
+
+
+_load_azd_env()
 
 # Tables that workspace-based Application Insights writes into. Limited to
 # the surface we care about — the script will show how many rows are in each
@@ -53,8 +99,10 @@ def _require_env(name: str) -> str:
     val = os.environ.get(name)
     if not val:
         sys.exit(
-            f"{name} is not set. Load the azd env first:\n"
-            f"    set -a; source .azure/fha-acas-codeact-dev/.env; set +a"
+            f"{name} is not set. It is auto-loaded from the active azd\n"
+            f"environment's .env — run `azd up`/`azd provision` first, or if you\n"
+            f"use a non-default env, export AZURE_ENV_NAME or source its .env:\n"
+            f"    set -a; source .azure/$(azd env get-value AZURE_ENV_NAME)/.env; set +a"
         )
     return val
 
