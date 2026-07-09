@@ -7,9 +7,16 @@
 //      * SandboxGroup Data Owner + Contributor on sandbox group
 //          (lets the orchestrator script pre-create sandboxes)
 //      * Cognitive Services User on Foundry account
-//          (lets the orchestrator script call the Responses endpoint)
+//          (data-plane baseline: call the Responses endpoint + inference)
 //      * Azure AI Developer on Foundry account
-//          (lets the caller list/manage agents — debug convenience)
+//          (create/read/update/delete projects, agents, tools, knowledge,
+//          connections — the "portal authoring" role)
+//      * Cognitive Services Contributor on Foundry account
+//          (manage the account itself: create model deployments, edit
+//          properties. Together these three are what unblock the Microsoft
+//          Foundry portal's authoring surfaces — Agents / Models / Knowledge.
+//          Subscription ``Owner`` does NOT help: it grants control-plane
+//          ``actions`` only, no Cognitive Services ``dataActions``.)
 //      * AcrPush on registry
 //          (lets ``azd deploy`` push the agent image)
 //      * Log Analytics Reader on workspace
@@ -61,6 +68,7 @@ var roleIds = {
   sandboxGroupDataOwner: 'c24cf47c-5077-412d-a19c-45202126392c'  // ACAS data-plane (preview)
   cognitiveServicesUser: 'a97b65f3-24c7-4388-baec-2e87135dc908'
   azureAIDeveloper:      '64702f94-c441-49e6-a78b-ef80e0188fee'
+  cognitiveServicesContributor: '25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68'  // Foundry portal authoring (deploy models, manage account)
   acrPush:               '8311e382-0749-4cb8-b61a-304f252e45ec'
   acrPull:               '7f951dda-4ed3-4680-a7ca-43fe172d538d'
   logAnalyticsReader:    '73c42c96-874c-492b-b04d-ab87d138a893'
@@ -124,6 +132,16 @@ resource callerFoundryAIDeveloper 'Microsoft.Authorization/roleAssignments@2022-
     principalId: callerPrincipalId
     principalType: callerPrincipalType
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.azureAIDeveloper)
+  }
+}
+
+resource callerFoundryPortalContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: foundryAccount
+  name: guid(foundryAccount.id, callerPrincipalId, roleIds.cognitiveServicesContributor)
+  properties: {
+    principalId: callerPrincipalId
+    principalType: callerPrincipalType
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.cognitiveServicesContributor)
   }
 }
 

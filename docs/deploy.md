@@ -18,7 +18,7 @@ containing five logical pieces. Each maps to a specific Bicep module:
 | **ACAS Sandbox Group** | The pool that ACAS sandboxes get leased from. Every `execute_code` / `run_shell` tool call inside the agent targets a sandbox in this group. | [`infra/modules/sandboxgroup.bicep`](../infra/modules/sandboxgroup.bicep) | `Microsoft.App/sandboxGroups` (preview, `2026-02-01-preview`) |
 | **Azure Container Registry (ACR)** | Hosts the FHA agent's container image. `azd deploy` does a *remote* build inside the registry (no local Docker needed), then Foundry pulls from here when registering a new agent version. | [`infra/modules/registry.bicep`](../infra/modules/registry.bicep) | `Microsoft.ContainerRegistry/registries` (Basic SKU) |
 | **Observability** | Log Analytics workspace + workspace-based App Insights. The agent container picks up the connection string via `APPLICATIONINSIGHTS_CONNECTION_STRING` and Agent Framework wires OTel export. | [`infra/modules/monitoring.bicep`](../infra/modules/monitoring.bicep) | `Microsoft.OperationalInsights/workspaces`<br>`Microsoft.Insights/components` |
-| **Role assignments (RBAC)** | Three principals get the roles they need. Bicep grants the caller principal (5 roles) and the Foundry project MSI (AcrPull for image pull); a postdeploy hook grants the Agent Instance MI (which doesn't exist until after agent registration). See "Identity flow" below. | [`infra/modules/rbac.bicep`](../infra/modules/rbac.bicep) + [`scripts/grant_agent_roles.sh`](../scripts/grant_agent_roles.sh) | `Microsoft.Authorization/roleAssignments` × 6 (Bicep) + 3 (postdeploy) |
+| **Role assignments (RBAC)** | Three principals get the roles they need. Bicep grants the caller principal (7 roles) and the Foundry project MSI (AcrPull for image pull); a postdeploy hook grants the Agent Instance MI (which doesn't exist until after agent registration). See "Identity flow" below. | [`infra/modules/rbac.bicep`](../infra/modules/rbac.bicep) + [`scripts/grant_agent_roles.sh`](../scripts/grant_agent_roles.sh) | `Microsoft.Authorization/roleAssignments` × 8 (Bicep) + 3 (postdeploy) |
 
 Composition: [`infra/main.bicep`](../infra/main.bicep) is subscription-scope
 and creates the resource group; [`infra/resources.bicep`](../infra/resources.bicep)
@@ -61,8 +61,8 @@ split into two phases:
    + Contributor (sandbox group)                                    + Contributor (sandbox group)
    + Cognitive Services User         Required so Foundry can        + Cognitive Services User
    + Azure AI Developer (Foundry)    pull the agent OCI image       (Foundry account)
-   + AcrPush (registry)              when booting the microVM.
-                                     Agent code never uses this MI.
+   + CogSvc Contributor (Foundry)    when booting the microVM.
+   + AcrPush (registry)              Agent code never uses this MI.
    ↑                                 ↑                              ↑
    rbac.bicep                        rbac.bicep                     scripts/grant_agent_roles.sh
                                                                     (azd hooks.postdeploy)
@@ -299,16 +299,23 @@ group's location. `azd` sources that value from the `AZURE_LOCATION`
 environment variable stored in `.azure/<env>/.env`.
 
 `.azure/` is `.gitignore`d, so a **fresh clone has no saved location**.
-Normally `azd` prompts you for one, but if the parameter file supplies an
-inline default (e.g. `${AZURE_LOCATION=westus2}`) `azd` treats the input as
-satisfied, skips the prompt, and leaves `AZURE_LOCATION` unset — so the
-subscription deployment has no location and validation fails.
+Normally `azd` prompts you for one — but it only does so when the `location`
+parameter in `infra/main.bicep` has **no default value**. If that parameter
+carries a default (e.g. `param location string = 'westus2'`), azd treats it
+as satisfied, **skips the location prompt**, and leaves `AZURE_LOCATION`
+unset — so the subscription-scoped deployment has no location and validation
+fails. (A default in `infra/main.parameters.json` alone doesn't help either
+way: the parameter value is not the same thing as the `AZURE_LOCATION` env
+var azd stamps onto the subscription deployment.)
 
-[`infra/main.parameters.json`](../infra/main.parameters.json) therefore uses
-`"location": { "value": "${AZURE_LOCATION}" }` (no inline default), so `azd`
-always prompts on a fresh environment and persists the choice. If you hit
-this error on an environment that already exists (created before this fix,
-or imported), set the value once and re-run:
+The fix is to declare `location` **without a default** in both files so azd
+always prompts and persists the choice:
+
+- [`infra/main.bicep`](../infra/main.bicep): `param location string` (no `=` default)
+- [`infra/main.parameters.json`](../infra/main.parameters.json): `"location": { "value": "${AZURE_LOCATION}" }`
+
+If you hit this error on an environment that already exists (created before
+this fix, or imported), set the value once and re-run:
 
 ```bash
 azd env set AZURE_LOCATION westus2
@@ -317,6 +324,61 @@ azd up
 
 The region is stored per-environment in `.azure/<env>/.env` (machine-local,
 never committed) — it is not hard-coded anywhere in the repo.
+
+### Foundry portal: "You don't have permission to build agents in this project"
+
+Azure has two independent permission planes, and ownership of one does not
+imply the other:
+
+| Plane | Controls | Granted by |
+|---|---|---|
+| ARM **control plane** | `azd up`, Bicep deployments, RBAC assignments | Subscription roles (`Owner`, `Contributor`) |
+| Cognitive Services **data plane** | Foundry portal authoring — agent/tool/knowledge/model CRUD | **Per-account** roles on `Microsoft.CognitiveServices/accounts` |
+
+The Foundry portal authorizes against the account's **data plane**, not ARM.
+Subscription `Owner` grants control-plane `actions: ["*"]` but **no**
+Cognitive Services `dataActions` — so being subscription Owner still shows a
+padlock on Agents / Models / Knowledge. This is by design and is the single
+most common cause of this symptom.
+
+The fix is three roles at the **Foundry account scope** (not subscription /
+management-group scope — broader scope leaks portal-write to every future
+account). [`infra/modules/rbac.bicep`](../infra/modules/rbac.bicep) grants
+all three to the caller principal on `azd up`:
+
+| Role | GUID | Grants |
+|---|---|---|
+| `Cognitive Services User` | `a97b65f3-24c7-4388-baec-2e87135dc908` | Data-plane baseline: reads + inference calls. |
+| `Azure AI Developer` | `64702f94-c441-49e6-a78b-ef80e0188fee` | Create/read/update/delete projects, agents, tools, knowledge, connections — the portal authoring role. |
+| `Cognitive Services Contributor` | `25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68` | Manage the account: create model deployments, edit properties. |
+
+If you provisioned before this was wired up (or are a different principal
+than the original deployer), either re-run `azd provision` or assign the
+missing role(s) directly:
+
+```bash
+ACCOUNT_ID=$(az cognitiveservices account show \
+    -n <foundry-account-name> -g <rg-name> --query id -o tsv)
+ME=$(az ad signed-in-user show --query id -o tsv)
+for ROLE in "Cognitive Services User" "Azure AI Developer" "Cognitive Services Contributor"; do
+  az role assignment create --assignee-object-id "$ME" \
+      --assignee-principal-type User --role "$ROLE" --scope "$ACCOUNT_ID"
+done
+```
+
+Verify the data plane directly (expect `HTTP 200`, not 401/403):
+
+```bash
+TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
+curl -sS -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+    "https://<account>.services.ai.azure.com/api/projects/<project>/agents?api-version=v1"
+```
+
+If the CLI shows all three roles and the data-plane `curl` returns 200 but
+the portal *still* shows a padlock, it's a **stale token/session**, not
+RBAC: sign out of `https://ai.azure.com`, clear cookies for `*.azure.com`
+(or use a private window), and sign back in. RBAC propagates in under a
+minute typically, occasionally up to ~5 minutes.
 
 ### Build fails with `ResolutionTooDeep: 200000`
 

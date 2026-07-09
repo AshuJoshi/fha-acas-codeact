@@ -34,8 +34,8 @@ targetScope = 'subscription'
 param environmentName string
 
 @minLength(1)
-@description('Primary Azure region. Hosts the sandbox group, ACR, and observability.')
-param location string = 'westus2'
+@description('Primary Azure region. Hosts the sandbox group, ACR, and observability. No default: azd must prompt for this so AZURE_LOCATION gets set in the environment — which the subscription-scoped deployment needs for its own deployment location.')
+param location string
 
 @minLength(1)
 @description('Region for the Foundry account + project + model deployment. Defaults to eastus2 because gpt-5.4 may not be in every region\'s OpenAI catalog.')
