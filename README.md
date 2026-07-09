@@ -102,6 +102,60 @@ uv run python scripts/orchestrate_codeact.py "import this" --new-session
 
 ---
 
+## Comparison models (optional)
+
+The default deploy stands up a single model (`gpt-5.4`). To A/B a second
+model against it — e.g. **Fireworks GLM-5.2**, which is tuned for coding —
+use the standalone helper. It is intentionally **not** part of `azd up`, so
+the primary deploy stays lean and Microsoft-only.
+
+> ⚠️ **GLM-5.2 via Fireworks is a Non-Microsoft (partner MaaS) model.**
+> Using it shares data with Fireworks AI and sends it outside Microsoft
+> systems, under different compliance/data-handling rules. Review the
+> model card and https://trust.fireworks.ai/ before sending sensitive
+> code or data through it.
+
+```bash
+# Deploy GLM-5.2 onto the existing Foundry account (paygo DataZoneStandard).
+# Match gpt-5.4's throughput for a fair comparison:
+uv run python scripts/deploy_comparison_model.py --capacity 10
+
+# List deployments on the account
+uv run python scripts/deploy_comparison_model.py --list
+
+# Deploy a different Fireworks model under a custom deployment name
+uv run python scripts/deploy_comparison_model.py \
+    --deployment-name qwen3 --model-name FW-Qwen3.6-35B-A3B
+
+# Tear it down (does not touch gpt-5.4) — stops paygo billing for it
+uv run python scripts/deploy_comparison_model.py --delete
+```
+
+### Pointing the agent at the other model
+
+The agent is model-agnostic: [`agent/agent.yaml`](agent/agent.yaml) reads
+`${AZURE_AI_MODEL_DEPLOYMENT_NAME}`, which `azd` substitutes from the env at
+deploy time — the model is **not** hard-coded in the YAML. To rerun the same
+FHA against GLM-5.2, override that variable and redeploy the agent:
+
+```bash
+# Swap the agent to the GLM-5.2 deployment and redeploy (no re-provision)
+azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME glm-5.2
+azd deploy
+
+# ...run your prompts, then switch back to gpt-5.4
+azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME gpt-5.4
+azd deploy
+```
+
+> Note: `AZURE_AI_MODEL_DEPLOYMENT_NAME` is also a Bicep **output**, so a
+> subsequent `azd provision` resets it to the Bicep-deployed model
+> (`gpt-5.4`). The `azd env set` override only sticks until the next
+> provision — fine for an A/B run; for a permanent switch, change the model
+> in [`infra/main.bicep`](infra/main.bicep) instead.
+
+---
+
 ## Validate the deployment
 
 Three scripts verify the agent is healthy after `azd up` or `azd deploy`.
@@ -171,6 +225,7 @@ fha-acas-codeact/
 │   ├── three_case_latency.py      # FS retention + microVM-pinning probe
 │   ├── timing_probe.py            # Cold-vs-warm latency profile
 │   ├── query_appinsights.py       # Post-deploy telemetry forensics
+│   ├── deploy_comparison_model.py # Deploy an extra model (e.g. GLM-5.2) for A/B
 │   └── grant_agent_roles.sh       # azd postdeploy hook (runtime RBAC)
 ├── docs/
 │   ├── architecture.md
