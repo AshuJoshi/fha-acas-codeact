@@ -2,7 +2,7 @@
 #    uv pip compile agent/requirements.txt --output-file agent/requirements.lock
 a2a-sdk==0.3.23
     # via agent-framework-a2a
-acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/03b70ccc823e5dc64fbda0ccabb28b41031d76e7.zip
+acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/7ce71f250585aaee2ba9338cd0596611bf901ada.zip
     # via -r agent/requirements.txt
 ag-ui-protocol==0.1.19
     # via agent-framework-ag-ui

@@ -21,6 +21,20 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
+# Optional: local model-comparison harness (scripts/compare_models.py).
+# Runs the Agent Framework loop LOCALLY against the same models + acas_toolkit
+# tools as the FHA, executing code in ACAS — so you can A/B models (e.g.
+# gpt-5.4 vs glm-5.2) without an azd deploy. acas-toolkit is pinned to the
+# SAME commit the FHA container uses (agent/requirements.txt) so local runs
+# exercise identical tool code — a fair comparison. Install with:
+#     uv sync --extra compare
+# To hack on acas-toolkit instead, replace the pinned archive with an editable
+# local path, e.g.:  "acas-toolkit @ file:///Users/ashu/TechDev/Projects/acas-toolkit"
+[project.optional-dependencies]
+compare = [
+    "acas-toolkit[agent-framework] @ https://github.com/AshuJoshi/acas-toolkit/archive/7ce71f250585aaee2ba9338cd0596611bf901ada.zip",
+]
+
 [tool.uv]
 # `azure-containerapps-sandbox` is currently a preview package on PyPI;
 # scope the pre-release allowance to that package only so we don't

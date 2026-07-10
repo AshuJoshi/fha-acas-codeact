@@ -1,4 +1,10 @@
-acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/03b70ccc823e5dc64fbda0ccabb28b41031d76e7.zip
+# acas-toolkit is installed WITHOUT the [agent-framework] extra: the extra
+# pins agent-framework>=1.9, which on linux pulls agent-framework-core[all] +
+# hyperlight and fails to resolve for this container platform. The separation
+# lets the container keep its OWN (working) agent-framework pin below while
+# still getting the toolkit's integration code. The container installs from
+# requirements.lock (--no-deps), so the toolkit's own deps are not re-resolved.
+acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/7ce71f250585aaee2ba9338cd0596611bf901ada.zip
 agent-framework>=1.2.2,<1.3
 agent-framework-foundry>=1.2.2,<1.3
 agent-framework-foundry-hosting
