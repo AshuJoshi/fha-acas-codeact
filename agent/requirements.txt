@@ -1,12 +1,19 @@
-# acas-toolkit is installed WITHOUT the [agent-framework] extra: the extra
-# pins agent-framework>=1.9, which on linux pulls agent-framework-core[all] +
-# hyperlight and fails to resolve for this container platform. The separation
-# lets the container keep its OWN (working) agent-framework pin below while
-# still getting the toolkit's integration code. The container installs from
-# requirements.lock (--no-deps), so the toolkit's own deps are not re-resolved.
+# Agent Framework: depend on the TARGETED Foundry Hosted Agent packages
+# (core + foundry + foundry-hosting), NOT the `agent-framework` umbrella
+# meta-package. The umbrella at >=1.9 pulls agent-framework-core[all], which
+# drags in agent-framework-hyperlight (a wasm backend) that will not build on
+# the linux container platform. These three are exactly what agent/main.py
+# imports — `agent_framework` (core), `agent_framework.foundry` (foundry),
+# `agent_framework_foundry_hosting` (foundry-hosting) — and they resolve
+# cleanly on linux with no hyperlight/wasm in the tree.
+#
+# acas-toolkit is installed WITHOUT its [agent-framework] extra (which would
+# re-introduce the umbrella). acas_toolkit.integrations.agent_framework imports
+# `from agent_framework import tool`, satisfied by agent-framework-core here.
+# The container installs from requirements.lock with --no-deps.
 acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/7ce71f250585aaee2ba9338cd0596611bf901ada.zip
-agent-framework>=1.2.2,<1.3
-agent-framework-foundry>=1.2.2,<1.3
+agent-framework-core>=1.11,<2
+agent-framework-foundry>=1.10,<2
 agent-framework-foundry-hosting
 azure-containerapps-sandbox>=0.1.0b2,<0.2
 python-dotenv>=1.0

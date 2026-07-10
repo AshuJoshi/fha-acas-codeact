@@ -219,6 +219,11 @@ def _invoke_agent(
         headers["x-ms-chat-isolation-key"] = chat_id
 
     body: dict[str, Any] = {"input": prompt}
+    # Pass the pre-created sandbox id to the agent via the Responses request
+    # `metadata` field. Custom HTTP headers (SANDBOX_HEADER) are stripped by the
+    # Foundry hosted-agent platform before reaching the container, so metadata is
+    # the reliable channel. The agent reads request.metadata["acas_sandbox_id"].
+    body["metadata"] = {"acas_sandbox_id": sandbox_id}
     if previous_response_id:
         # This is what actually pins the Responses session to the same FHA
         # microVM (same boot_id, same agent pid). The chat-isolation-key
