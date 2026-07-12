@@ -6,13 +6,15 @@ lean and Microsoft-only; use this script on demand to add a second model to
 the *existing* Foundry account so you can compare it against the default
 ``gpt-5.4`` (e.g. for coding quality).
 
-Defaults deploy **Fireworks GLM-5.2** (catalog name ``FW-GLM-5.2``).
+Defaults deploy **Fireworks GLM-5.2** (catalog name ``FW-GLM-5.2``). A small
+registry of known comparison models (``COMPARISON_MODELS``) lets you deploy or
+tear down several at once with ``--models`` (e.g. GLM-5.2 + Kimi-K2.7-Code).
 
-    ⚠️  GLM-5.2 via Fireworks is a **Non-Microsoft (partner MaaS) model**.
-        When you use it, data is shared with Fireworks AI and sent outside
-        Microsoft systems, and different compliance/data-handling rules
+    ⚠️  GLM-5.2 / Kimi via Fireworks are **Non-Microsoft (partner MaaS)
+        models**. When you use them, data is shared with Fireworks AI and sent
+        outside Microsoft systems, and different compliance/data-handling rules
         apply. See the model card / https://trust.fireworks.ai/ before
-        sending sensitive code or data through it.
+        sending sensitive code or data through them.
 
 Deploy parameters were captured empirically against a live account:
   format  = Fireworks        (NOT ``OpenAI`` — that's for gpt-* models)
@@ -32,21 +34,27 @@ these via rbac.bicep's Cognitive Services Contributor grant).
 
 Examples
 --------
-    # Deploy GLM-5.2 with defaults (capacity 1 = ~1000 tokens/min — low).
+    # Deploy GLM-5.2 with defaults (capacity 1 ≈ 1000 tokens/min — low).
     uv run python scripts/deploy_comparison_model.py
 
     # Bump throughput for real agent runs (subject to your quota).
     uv run python scripts/deploy_comparison_model.py --capacity 10
 
-    # Deploy a different Fireworks model under a custom deployment name.
+    # Deploy the whole comparison set (GLM-5.2 + Kimi-K2.7-Code) at capacity 10.
+    uv run python scripts/deploy_comparison_model.py --models all --capacity 10
+
+    # Deploy just Kimi from the registry.
+    uv run python scripts/deploy_comparison_model.py --models kimi-k2.7-code --capacity 10
+
+    # Deploy a different Fireworks model under a custom deployment name (ad-hoc).
     uv run python scripts/deploy_comparison_model.py \\
         --deployment-name qwen3 --model-name FW-Qwen3.6-35B-A3B
 
     # List current deployments on the account.
     uv run python scripts/deploy_comparison_model.py --list
 
-    # Tear down the comparison deployment (does not touch gpt-5.4).
-    uv run python scripts/deploy_comparison_model.py --delete
+    # Tear down the whole comparison set (does not touch gpt-5.4).
+    uv run python scripts/deploy_comparison_model.py --models all --delete
 """
 
 from __future__ import annotations
@@ -96,6 +104,25 @@ def _load_azd_env() -> None:
 _load_azd_env()
 
 
+# Known comparison models (all pay-as-you-go DataZoneStandard). The key is the
+# deployment name you'll pass to the benchmark (`--model <key>`); the value is
+# the catalog spec. Add entries here to grow the comparison set.
+COMPARISON_MODELS: dict[str, dict[str, str]] = {
+    "glm-5.2": {
+        "model_name": "FW-GLM-5.2",
+        "model_format": "Fireworks",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
+    "kimi-k2.7-code": {
+        "model_name": "FW-Kimi-K2.7-Code",
+        "model_format": "Fireworks",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
+}
+
+
 def _require_env(name: str) -> str:
     val = os.environ.get(name)
     if not val:
@@ -136,6 +163,90 @@ def _list_deployments(account: str, resource_group: str) -> int:
     return proc.returncode
 
 
+def _deploy_one(
+    account: str, resource_group: str, spec: dict[str, str], capacity: int
+) -> int:
+    """Create one model deployment. Returns the az exit code (0 = ok)."""
+    print(
+        f"[deploy-model] deploying '{spec['deployment_name']}' "
+        f"({spec['model_format']}/{spec['model_name']} v{spec['model_version']}, "
+        f"sku={spec['sku']} capacity={capacity}) to {account} ({resource_group})",
+        file=sys.stderr,
+    )
+    proc = _az(
+        [
+            "cognitiveservices", "account", "deployment", "create",
+            "-n", account, "-g", resource_group,
+            "--deployment-name", spec["deployment_name"],
+            "--model-name", spec["model_name"],
+            "--model-version", spec["model_version"],
+            "--model-format", spec["model_format"],
+            "--sku-name", spec["sku"],
+            "--sku-capacity", str(capacity),
+        ]
+    )
+    if proc.returncode != 0:
+        sys.stderr.write(proc.stderr)
+        return proc.returncode
+    print(f"[deploy-model] deployed '{spec['deployment_name']}'", file=sys.stderr)
+    return 0
+
+
+def _delete_one(account: str, resource_group: str, deployment_name: str) -> int:
+    """Delete one model deployment. Returns the az exit code (0 = ok)."""
+    print(
+        f"[deploy-model] deleting deployment '{deployment_name}' "
+        f"from {account} ({resource_group})",
+        file=sys.stderr,
+    )
+    proc = _az(
+        [
+            "cognitiveservices", "account", "deployment", "delete",
+            "-n", account, "-g", resource_group,
+            "--deployment-name", deployment_name,
+        ]
+    )
+    if proc.returncode != 0:
+        sys.stderr.write(proc.stderr)
+        return proc.returncode
+    print(f"[deploy-model] deleted '{deployment_name}'", file=sys.stderr)
+    return 0
+
+
+def _resolve_targets(args: argparse.Namespace) -> list[dict[str, str]]:
+    """Build the list of model specs to operate on.
+
+    ``--models`` (comma-separated registry keys, or ``all``) takes precedence;
+    otherwise fall back to the single ad-hoc model from the individual flags.
+    """
+    if args.models:
+        raw = args.models.strip()
+        keys = (
+            list(COMPARISON_MODELS)
+            if raw.lower() == "all"
+            else [k.strip() for k in raw.split(",") if k.strip()]
+        )
+        targets: list[dict[str, str]] = []
+        for key in keys:
+            spec = COMPARISON_MODELS.get(key)
+            if spec is None:
+                sys.exit(
+                    f"Unknown model key '{key}'. Known: "
+                    f"{', '.join(COMPARISON_MODELS)} (or 'all')."
+                )
+            targets.append({"deployment_name": key, **spec})
+        return targets
+    return [
+        {
+            "deployment_name": args.deployment_name,
+            "model_name": args.model_name,
+            "model_format": args.model_format,
+            "model_version": args.model_version,
+            "sku": args.sku,
+        }
+    ]
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         description=__doc__,
@@ -144,7 +255,13 @@ def main() -> int:
     p.add_argument(
         "--deployment-name",
         default="glm-5.2",
-        help="Name of the deployment to create/delete (default: glm-5.2).",
+        help="Name of the deployment to create/delete (default: glm-5.2). "
+        "Ignored when --models is given.",
+    )
+    p.add_argument(
+        "--models",
+        help="Comma-separated registry keys to deploy/delete as a set, or 'all'. "
+        f"Known: {', '.join(COMPARISON_MODELS)}. Overrides the single-model flags.",
     )
     p.add_argument(
         "--model-name",
@@ -191,50 +308,17 @@ def main() -> int:
     if args.list:
         return _list_deployments(account, resource_group)
 
+    targets = _resolve_targets(args)
+    rc = 0
     if args.delete:
-        print(
-            f"[deploy-model] deleting deployment '{args.deployment_name}' "
-            f"from {account} ({resource_group})",
-            file=sys.stderr,
-        )
-        proc = _az(
-            [
-                "cognitiveservices", "account", "deployment", "delete",
-                "-n", account, "-g", resource_group,
-                "--deployment-name", args.deployment_name,
-            ]
-        )
-        if proc.returncode != 0:
-            sys.stderr.write(proc.stderr)
-            return proc.returncode
-        print(f"[deploy-model] deleted '{args.deployment_name}'", file=sys.stderr)
-        return _list_deployments(account, resource_group)
+        for spec in targets:
+            rc = _delete_one(account, resource_group, spec["deployment_name"]) or rc
+    else:
+        for spec in targets:
+            rc = _deploy_one(account, resource_group, spec, args.capacity) or rc
 
-    print(
-        f"[deploy-model] deploying '{args.deployment_name}' "
-        f"({args.model_format}/{args.model_name} v{args.model_version}, "
-        f"sku={args.sku} capacity={args.capacity}) to "
-        f"{account} ({resource_group})",
-        file=sys.stderr,
-    )
-    proc = _az(
-        [
-            "cognitiveservices", "account", "deployment", "create",
-            "-n", account, "-g", resource_group,
-            "--deployment-name", args.deployment_name,
-            "--model-name", args.model_name,
-            "--model-version", args.model_version,
-            "--model-format", args.model_format,
-            "--sku-name", args.sku,
-            "--sku-capacity", str(args.capacity),
-        ]
-    )
-    if proc.returncode != 0:
-        sys.stderr.write(proc.stderr)
-        return proc.returncode
-
-    print(f"[deploy-model] deployed '{args.deployment_name}'", file=sys.stderr)
-    return _list_deployments(account, resource_group)
+    _list_deployments(account, resource_group)
+    return rc
 
 
 if __name__ == "__main__":

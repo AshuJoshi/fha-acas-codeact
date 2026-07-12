@@ -44,7 +44,7 @@ import run_local_codeact as local  # noqa: E402
 from acas_toolkit import SandboxPool  # noqa: E402
 
 
-DEFAULT_MODELS = ["gpt-5.4", "glm-5.2"]
+DEFAULT_MODELS = ["gpt-5.4", "glm-5.2", "kimi-k2.7-code"]
 DEFAULT_PROMPTS = [
     "Compute the sum of squares from 1 to 100 and print only the integer.",
     "Compute the first 20 Fibonacci numbers and print them as a comma-separated list.",
@@ -110,7 +110,7 @@ def _summarize(records: list[dict[str, Any]], models: list[str]) -> None:
     print("MODEL COMPARISON")
     print("=" * 104)
     hdr = (
-        f"{'model':<10}{'runs':>5}{'ok':>5}{'wall(s)':>9}{'turns':>7}"
+        f"{'model':<16}{'runs':>5}{'ok':>5}{'wall(s)':>9}{'turns':>7}"
         f"{'model(s)':>10}{'out-tok':>9}{'tok/s':>8}{'tool(s)':>9}{'install':>9}"
     )
     print(hdr)
@@ -125,7 +125,7 @@ def _summarize(records: list[dict[str, Any]], models: list[str]) -> None:
         out_tok_cell = f"{out_tok:.0f}" if reported else "n/a"
         tps_cell = f"{_avg(tps):.1f}" if tps else "n/a"
         print(
-            f"{m:<10}{len(rs):>5}{len(ok):>4}/{len(rs):<1}"
+            f"{m:<16}{len(rs):>5}{len(ok):>4}/{len(rs):<1}"
             f"{_avg([r['total_wall_ms'] for r in ok]) / 1000:>9.2f}"
             f"{_avg([r['num_turns'] for r in ok]):>7.1f}"
             f"{_avg([r['total_model_ms'] for r in ok]) / 1000:>10.2f}"
