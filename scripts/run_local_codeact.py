@@ -43,6 +43,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -115,19 +116,45 @@ Rules:
 DEFAULT_MODEL = "gpt-5.4"
 DEFAULT_DISK = "python-3.13"
 
+# Detects package-install activity so its wall time can be reported separately
+# from pure code execution (a pip install runs in the sandbox, so it lands in the
+# tool bucket, not the model bucket — but it inflates wall time and turns, and it
+# reveals whether a model reached for a third-party dependency vs the stdlib).
+_INSTALL_RE = re.compile(
+    r"(?:^|[;&|]|\b)(?:!\s*)?(?:pip3?|uv|conda|mamba|poetry)\s+(?:pip\s+)?install\b"
+    r"|\bapt(?:-get)?\s+install\b"
+    r"|\bsubprocess\b.*\bpip\b.*\binstall\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _looks_like_install(payload: str | None) -> bool:
+    return bool(payload and _INSTALL_RE.search(payload))
+
 
 class _ModelCallTimer(ChatMiddleware):
-    """Records the wall-clock latency of every model (chat) call. The number of
-    calls is the turn count (each model<->tool round-trip plus the final answer
-    is one model call)."""
+    """Records the wall-clock latency AND token usage of every model (chat) call.
+    The number of calls is the turn count (each model<->tool round-trip plus the
+    final answer is one model call)."""
 
     def __init__(self) -> None:
         self.calls_ms: list[float] = []
+        self.calls_usage: list[dict[str, int | None]] = []
 
     async def process(self, context: Any, call_next: Any) -> None:
         t0 = time.monotonic()
         await call_next()
         self.calls_ms.append((time.monotonic() - t0) * 1000.0)
+        # usage_details is a TypedDict (plain dict at runtime), so read by key.
+        usage = getattr(getattr(context, "result", None), "usage_details", None) or {}
+        self.calls_usage.append(
+            {
+                "input_tokens": usage.get("input_token_count"),
+                "output_tokens": usage.get("output_token_count"),
+                "total_tokens": usage.get("total_token_count"),
+                "reasoning_tokens": usage.get("reasoning_output_token_count"),
+            }
+        )
 
 
 def _result_to_dict(res: Any) -> Any:
@@ -183,6 +210,7 @@ async def _run_agent(
                 "tool": "execute_code",
                 "code": code,
                 "timeout_s": timeout_s,
+                "is_install": _looks_like_install(code),
                 "result": _result_to_dict(res),
                 "tool_wall_ms": round(dt_ms, 1),
             }
@@ -208,6 +236,7 @@ async def _run_agent(
             {
                 "tool": "run_shell",
                 "command": command,
+                "is_install": _looks_like_install(command),
                 "result": _result_to_dict(res),
                 "tool_wall_ms": round(dt_ms, 1),
             }
@@ -238,18 +267,60 @@ async def _run_agent(
     model_call_ms = [round(x, 1) for x in timer.calls_ms]
     total_model_ms = round(sum(timer.calls_ms), 1)
     total_tool_ms = round(sum(t["tool_wall_ms"] for t in tool_calls), 1)
+
+    # Token usage (per call + totals) and throughput.
+    def _sum_tok(key: str) -> int:
+        return sum((u.get(key) or 0) for u in timer.calls_usage)
+
+    input_tokens = _sum_tok("input_tokens")
+    output_tokens = _sum_tok("output_tokens")
+    total_tokens = _sum_tok("total_tokens") or (input_tokens + output_tokens)
+    reasoning_tokens = _sum_tok("reasoning_tokens")
+    # Not every provider reports usage (e.g. some third-party Foundry models
+    # return all-zero counts). Tag the source so 0 isn't mistaken for "free".
+    tokens_source = "reported" if total_tokens else "none"
+    # Output-token throughput isolates raw generation speed from prompt size and
+    # from how verbose a model chooses to be (ms/token is capacity/load-robust).
+    ms_per_output_token = (
+        round(total_model_ms / output_tokens, 2) if output_tokens else None
+    )
+    output_tokens_per_s = (
+        round(output_tokens / (total_model_ms / 1000.0), 1) if total_model_ms else None
+    )
+
+    # Install-vs-exec split of the sandbox (tool) bucket.
+    install_ms = round(sum(t["tool_wall_ms"] for t in tool_calls if t.get("is_install")), 1)
+    exec_ms = round(total_tool_ms - install_ms, 1)
+    needed_install = any(t.get("is_install") for t in tool_calls)
+
     return {
         "model": model,
         "sandbox_id": sandbox_id,
         "prompt": prompt,
         "answer": answer,
         "total_wall_ms": round(total_ms, 1),
+        # Wall time with package installs removed — comparable across models
+        # regardless of whether one chose a third-party dependency.
+        "wall_excl_install_ms": round(total_ms - install_ms, 1),
         # Turns = number of model (chat) round-trips.
         "num_turns": len(model_call_ms),
         "model_call_ms": model_call_ms,
         "total_model_ms": total_model_ms,
+        # Token usage.
+        "tokens_source": tokens_source,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "ms_per_output_token": ms_per_output_token,
+        "output_tokens_per_s": output_tokens_per_s,
+        "model_call_usage": timer.calls_usage,
         "num_tool_calls": len(tool_calls),
         "total_tool_ms": total_tool_ms,
+        # Sandbox bucket split: package installs vs actual code execution.
+        "needed_install": needed_install,
+        "install_ms": install_ms,
+        "exec_ms": exec_ms,
         # Latency decomposition: wall = model + sandbox/tool + agent-loop overhead.
         "agent_overhead_ms": round(total_ms - total_model_ms - total_tool_ms, 1),
         "tool_calls": tool_calls,
@@ -267,7 +338,23 @@ def _print_summary(rec: dict[str, Any]) -> None:
         f"  turns (model)    : {rec['num_turns']}  |  model {rec['total_model_ms'] / 1000:.2f}s"
         f"  ({', '.join(f'{m / 1000:.1f}s' for m in rec['model_call_ms'])})"
     )
-    print(f"  tool calls       : {rec['num_tool_calls']}  |  sandbox {rec['total_tool_ms'] / 1000:.2f}s")
+    tps = rec.get("output_tokens_per_s")
+    mpt = rec.get("ms_per_output_token")
+    if rec.get("tokens_source") == "reported":
+        print(
+            f"  tokens           : in {rec.get('input_tokens', 0)}  out {rec.get('output_tokens', 0)}"
+            f"  (reasoning {rec.get('reasoning_tokens', 0)})"
+            + (f"  |  {tps:.1f} out-tok/s ({mpt:.1f} ms/tok)" if tps else "")
+        )
+    else:
+        print("  tokens           : n/a (provider did not report usage)")
+    install_note = ""
+    if rec.get("needed_install"):
+        install_note = f"  (install {rec.get('install_ms', 0) / 1000:.2f}s + exec {rec.get('exec_ms', 0) / 1000:.2f}s)"
+    print(
+        f"  tool calls       : {rec['num_tool_calls']}  |  sandbox {rec['total_tool_ms'] / 1000:.2f}s"
+        f"{install_note}"
+    )
     print(f"  agent overhead   : {rec['agent_overhead_ms'] / 1000:.2f}s")
     print("-" * 76)
     for i, tc in enumerate(rec["tool_calls"], 1):

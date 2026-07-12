@@ -77,11 +77,23 @@ async def _bench_one(
             "success": False,
             "error": f"{type(ex).__name__}: {ex}",
             "total_wall_ms": round((time.monotonic() - t0) * 1000.0, 1),
+            "wall_excl_install_ms": round((time.monotonic() - t0) * 1000.0, 1),
             "num_turns": 0,
             "model_call_ms": [],
             "total_model_ms": 0.0,
+            "tokens_source": "none",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "reasoning_tokens": 0,
+            "ms_per_output_token": None,
+            "output_tokens_per_s": None,
+            "model_call_usage": [],
             "num_tool_calls": 0,
             "total_tool_ms": 0.0,
+            "needed_install": False,
+            "install_ms": 0.0,
+            "exec_ms": 0.0,
             "agent_overhead_ms": 0.0,
             "tool_calls": [],
             "answer": "",
@@ -94,24 +106,35 @@ def _avg(xs: list[float]) -> float:
 
 
 def _summarize(records: list[dict[str, Any]], models: list[str]) -> None:
-    print("\n" + "=" * 92)
+    print("\n" + "=" * 104)
     print("MODEL COMPARISON")
-    print("=" * 92)
-    hdr = f"{'model':<10}{'runs':>5}{'ok':>5}{'wall(s)':>9}{'turns':>7}{'model(s)':>10}{'tool(s)':>9}{'toolcalls':>11}"
+    print("=" * 104)
+    hdr = (
+        f"{'model':<10}{'runs':>5}{'ok':>5}{'wall(s)':>9}{'turns':>7}"
+        f"{'model(s)':>10}{'out-tok':>9}{'tok/s':>8}{'tool(s)':>9}{'install':>9}"
+    )
     print(hdr)
-    print("-" * 92)
+    print("-" * 104)
     for m in models:
         rs = [r for r in records if r["model"] == m]
         ok = [r for r in rs if r.get("success")]
+        n_install = sum(1 for r in ok if r.get("needed_install"))
+        reported = [r for r in ok if r.get("tokens_source") == "reported"]
+        tps = [r["output_tokens_per_s"] for r in reported if r.get("output_tokens_per_s")]
+        out_tok = _avg([r.get("output_tokens", 0) for r in reported]) if reported else 0
+        out_tok_cell = f"{out_tok:.0f}" if reported else "n/a"
+        tps_cell = f"{_avg(tps):.1f}" if tps else "n/a"
         print(
             f"{m:<10}{len(rs):>5}{len(ok):>4}/{len(rs):<1}"
             f"{_avg([r['total_wall_ms'] for r in ok]) / 1000:>9.2f}"
             f"{_avg([r['num_turns'] for r in ok]):>7.1f}"
             f"{_avg([r['total_model_ms'] for r in ok]) / 1000:>10.2f}"
+            f"{out_tok_cell:>9}"
+            f"{tps_cell:>8}"
             f"{_avg([r['total_tool_ms'] for r in ok]) / 1000:>9.2f}"
-            f"{_avg([r['num_tool_calls'] for r in ok]):>11.1f}"
+            f"{n_install:>6}/{len(ok):<2}"
         )
-    print("-" * 92)
+    print("-" * 104)
     # Per-prompt, model-vs-model (first repeat only, for a readable snapshot).
     prompts = []
     for r in records:
@@ -128,7 +151,7 @@ def _summarize(records: list[dict[str, Any]], models: list[str]) -> None:
                 mark = "" if r.get("success") else "✗"
                 cells.append(f"{m}={r['total_wall_ms'] / 1000:.1f}{mark}")
         print(f"  - {p[:60]:<60} {'  '.join(cells)}")
-    print("=" * 92)
+    print("=" * 104)
 
 
 async def run(args: argparse.Namespace) -> int:
