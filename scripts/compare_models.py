@@ -17,13 +17,13 @@ Env: auto-loaded from the active azd env (see run_local_codeact). Auth: az login
 
 Examples
 --------
-    # Default suite, gpt-5.4 vs glm-5.2, one repeat, results to /tmp/model-compare
+    # Default suite, all models in DEFAULT_MODELS, one repeat, results to ./benchmark-results
     uv run --extra compare python scripts/compare_models.py
 
     # Three repeats, 5s pacing, custom models, custom prompts file (one per line)
     uv run --extra compare python scripts/compare_models.py \\
-        --models gpt-5.4,glm-5.2 --repeats 3 --gap-s 5 --prompts prompts.txt \\
-        --out-dir /tmp/bench
+        --models gpt-5.4,glm-5.2,kimi-k2.7-code --repeats 3 --gap-s 5 \\
+        --prompts prompts.txt --out-dir benchmark-results
 """
 
 from __future__ import annotations
@@ -219,7 +219,7 @@ def main() -> int:
     p.add_argument("--repeats", type=int, default=1, help="Repeats per (model, prompt) for averaging. Default: 1.")
     p.add_argument("--gap-s", type=float, default=3.0, help="Seconds to pause between runs. Default: 3.")
     p.add_argument("--disk", default=local.DEFAULT_DISK, help=f"Sandbox disk image (default: {local.DEFAULT_DISK}).")
-    p.add_argument("--out-dir", default="/tmp/model-compare", help="Directory for per-run + aggregate JSON.")
+    p.add_argument("--out-dir", default="benchmark-results", help="Directory for per-run + aggregate JSON (gitignored). Default: benchmark-results.")
     args = p.parse_args()
     return asyncio.run(run(args))
 

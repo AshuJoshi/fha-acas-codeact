@@ -34,3 +34,6 @@ build/
 
 # Local teardown logs (may contain env backups with secrets)
 .cleanup-log/
+
+# Local model-comparison benchmark output (raw run records + aggregates)
+benchmark-results/
