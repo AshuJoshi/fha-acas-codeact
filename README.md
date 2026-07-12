@@ -227,6 +227,15 @@ rate limits, and every run is saved as JSON (`run_NNN_*.json` plus an
 aggregate `all_records.json`) under `--out-dir`. That folder defaults to
 `benchmark-results/` and is **gitignored** — the raw records stay local.
 
+> **Chat Completions vs Responses API (`--api`).** By default the harness calls
+> models via the **Chat Completions** API (`--api chat`), which reports token
+> usage for **every** model — including the Fireworks models (GLM-5.2,
+> Kimi-K2.7-Code), which return **zero** tokens on the Responses API. Use
+> `--api responses` to match the deployed FHA (which uses the Responses API via
+> `ResponsesHostServer`); on that path the Fireworks models show `n/a` tokens.
+> The two paths can also differ in latency, so keep `--api` fixed within a
+> single comparison.
+
 > **Model cold-starts.** The *first* inference on a freshly-deployed or idle
 > model endpoint can be far slower than steady state (we've seen a first call
 > take ~52s vs ~3s warm). This is a **provider-side model cold-start, not the
@@ -251,7 +260,7 @@ The comparison table (one row per model, averaged over the successful runs):
 | `wall(s)` | End-to-end wall time per run (model + sandbox + agent-loop overhead). |
 | `turns` | Model round-trips per run. A tool-using answer is usually ≥2 (write code → read result → answer); an extra `pip install` step adds a turn. |
 | `model(s)` | Time spent **in the model** (summed across turns). Usually the dominant cost. |
-| `out-tok` | Output tokens generated. `n/a` if the provider doesn't report usage (both Fireworks models currently return no usage; `gpt-5.4` does). |
+| `out-tok` | Output tokens generated. Reported for all models on `--api chat` (the default); shows `n/a` on `--api responses` for models that don't report usage there (the Fireworks models return zero tokens on the Responses API; `gpt-5.4` reports on both). |
 | `tok/s` | Output tokens per second — the **capacity/load-robust** speed metric. It isolates raw generation speed from prompt size and from how verbose a model chooses to be. `n/a` when tokens aren't reported. |
 | `tool(s)` | Time spent in the sandbox (code execution **and** any package installs). |
 | `install` | How many of the runs needed a `pip`/`apt`/`uv` install (`k/n`). |

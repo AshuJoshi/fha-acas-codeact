@@ -59,7 +59,7 @@ DEFAULT_PROMPTS = [
 
 
 async def _bench_one(
-    *, pool: SandboxPool, model: str, prompt: str, disk: str, project_endpoint: str
+    *, pool: SandboxPool, model: str, prompt: str, disk: str, project_endpoint: str, api: str
 ) -> dict[str, Any]:
     """Run one (model, prompt) on a fresh sandbox; never raise — capture failures."""
     t0 = time.monotonic()
@@ -71,12 +71,14 @@ async def _bench_one(
                 model=model,
                 prompt=prompt,
                 project_endpoint=project_endpoint,
+                api=api,
             )
         rec["success"] = bool((rec.get("answer") or "").strip())
         rec["error"] = None
     except Exception as ex:  # noqa: BLE001 - benchmark must survive any single failure
         rec = {
             "model": model,
+            "api": api,
             "prompt": prompt,
             "success": False,
             "error": f"{type(ex).__name__}: {ex}",
@@ -201,6 +203,7 @@ async def run(args: argparse.Namespace) -> int:
                     prompt=WARMUP_PROMPT,
                     disk=args.disk,
                     project_endpoint=project_endpoint,
+                    api=args.api,
                 )
                 cold_start[model] = warm.get("total_wall_ms", 0.0)
                 print(
@@ -223,6 +226,7 @@ async def run(args: argparse.Namespace) -> int:
                         prompt=prompt,
                         disk=args.disk,
                         project_endpoint=project_endpoint,
+                        api=args.api,
                     )
                     rec["repeat"] = rep + 1
                     records.append(rec)
@@ -253,6 +257,14 @@ def main() -> int:
         "excluded from the averages and reported separately as cold-start.",
     )
     p.add_argument("--disk", default=local.DEFAULT_DISK, help=f"Sandbox disk image (default: {local.DEFAULT_DISK}).")
+    p.add_argument(
+        "--api",
+        choices=["chat", "responses"],
+        default=local.DEFAULT_API,
+        help="Model call surface. 'chat' (Chat Completions) reports token usage "
+        "for all models incl. Fireworks; 'responses' matches the FHA. "
+        f"Default: {local.DEFAULT_API}.",
+    )
     p.add_argument("--out-dir", default="benchmark-results", help="Directory for per-run + aggregate JSON (gitignored). Default: benchmark-results.")
     args = p.parse_args()
     return asyncio.run(run(args))

@@ -82,7 +82,9 @@ _load_azd_env()
 
 from agent_framework import Agent, ChatMiddleware, tool  # noqa: E402
 from agent_framework.foundry import FoundryChatClient  # noqa: E402
-from azure.identity import AzureCliCredential  # noqa: E402
+from agent_framework.openai import OpenAIChatCompletionClient  # noqa: E402
+from azure.identity import AzureCliCredential, get_bearer_token_provider  # noqa: E402
+from openai import AsyncAzureOpenAI  # noqa: E402
 from pydantic import Field  # noqa: E402
 
 from acas_toolkit import SandboxPool  # noqa: E402
@@ -115,6 +117,15 @@ Rules:
 
 DEFAULT_MODEL = "gpt-5.4"
 DEFAULT_DISK = "python-3.13"
+# API surface for the model calls:
+#   chat      -> Chat Completions (OpenAIChatCompletionClient). Reports token
+#                usage for ALL models, including Fireworks (GLM/Kimi). Recommended
+#                for benchmarking.
+#   responses -> Responses API (FoundryChatClient). Matches the deployed FHA, but
+#                Fireworks models report zero tokens on this path.
+DEFAULT_API = "chat"
+CHAT_API_VERSION = "2024-10-21"
+COGNITIVE_SCOPE = "https://cognitiveservices.azure.com/.default"
 
 # Detects package-install activity so its wall time can be reported separately
 # from pure code execution (a pip install runs in the sandbox, so it lands in the
@@ -174,11 +185,14 @@ async def _run_agent(
     model: str,
     prompt: str,
     project_endpoint: str,
+    api: str = DEFAULT_API,
 ) -> dict[str, Any]:
     """LOCAL AGENT: build the agent bound to ``sandbox_id`` and run ``prompt``.
 
     Captures every tool call (generated code/command + result + wall time) and
-    the final answer. Returns a structured record.
+    the final answer. Returns a structured record. ``api`` selects the model
+    call surface: ``chat`` (Chat Completions, token usage for all models) or
+    ``responses`` (Responses API, matches the FHA).
     """
     inner_execute = make_execute_code_tool(pool, sandbox_id)
     inner_shell = make_run_shell_tool(pool, sandbox_id)
@@ -244,11 +258,27 @@ async def _run_agent(
         return res
 
     timer = _ModelCallTimer()
-    client = FoundryChatClient(
-        project_endpoint=project_endpoint,
-        model=model,
-        credential=AzureCliCredential(),
-    )
+    raw_client: AsyncAzureOpenAI | None = None
+    if api == "chat":
+        account = os.environ.get("FOUNDRY_ACCOUNT_NAME")
+        if not account:
+            raise RuntimeError(
+                "FOUNDRY_ACCOUNT_NAME is required for --api chat (auto-loaded from "
+                "the azd env). Use --api responses to fall back to the FHA path."
+            )
+        token_provider = get_bearer_token_provider(AzureCliCredential(), COGNITIVE_SCOPE)
+        raw_client = AsyncAzureOpenAI(
+            azure_endpoint=f"https://{account}.openai.azure.com/",
+            azure_ad_token_provider=token_provider,
+            api_version=CHAT_API_VERSION,
+        )
+        client: Any = OpenAIChatCompletionClient(model=model, async_client=raw_client)
+    else:
+        client = FoundryChatClient(
+            project_endpoint=project_endpoint,
+            model=model,
+            credential=AzureCliCredential(),
+        )
     agent = Agent(
         client=client,
         name="LocalCodeActAgent",
@@ -257,10 +287,14 @@ async def _run_agent(
         middleware=[timer],
     )
 
-    print(f"[local] model={model} sandbox={sandbox_id}", file=sys.stderr)
+    print(f"[local] model={model} sandbox={sandbox_id} api={api}", file=sys.stderr)
     print(f"[local] prompt: {prompt}", file=sys.stderr)
     t0 = time.monotonic()
-    result = await agent.run(prompt)
+    try:
+        result = await agent.run(prompt)
+    finally:
+        if raw_client is not None:
+            await raw_client.close()
     total_ms = (time.monotonic() - t0) * 1000.0
 
     answer = getattr(result, "text", None) or str(result)
@@ -295,6 +329,7 @@ async def _run_agent(
 
     return {
         "model": model,
+        "api": api,
         "sandbox_id": sandbox_id,
         "prompt": prompt,
         "answer": answer,
@@ -395,6 +430,7 @@ async def run_once(args: argparse.Namespace) -> int:
                 model=args.model,
                 prompt=args.prompt,
                 project_endpoint=project_endpoint,
+                api=args.api,
             )
         else:
             t0 = time.monotonic()
@@ -407,6 +443,7 @@ async def run_once(args: argparse.Namespace) -> int:
                     model=args.model,
                     prompt=args.prompt,
                     project_endpoint=project_endpoint,
+                    api=args.api,
                 )
                 rec["sandbox_lease_ms"] = round(lease_ms, 1)
                 if args.keep_sandbox:
@@ -428,6 +465,14 @@ def main() -> int:
     )
     p.add_argument("prompt", help="Prompt to send to the local agent.")
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"Model deployment (default: {DEFAULT_MODEL}).")
+    p.add_argument(
+        "--api",
+        choices=["chat", "responses"],
+        default=DEFAULT_API,
+        help="Model call surface. 'chat' (Chat Completions) reports token usage "
+        "for all models incl. Fireworks; 'responses' matches the FHA (Responses "
+        f"API) but Fireworks report no tokens. Default: {DEFAULT_API}.",
+    )
     p.add_argument("--sandbox-id", help="Reuse an existing sandbox instead of leasing.")
     p.add_argument("--disk", default=DEFAULT_DISK, help=f"Disk image for a leased sandbox (default: {DEFAULT_DISK}).")
     p.add_argument("--keep-sandbox", action="store_true", help="Do not delete a leased sandbox after the run.")
