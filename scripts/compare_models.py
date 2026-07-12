@@ -45,6 +45,10 @@ from acas_toolkit import SandboxPool  # noqa: E402
 
 
 DEFAULT_MODELS = ["gpt-5.4", "glm-5.2", "kimi-k2.7-code"]
+# A trivial prompt used only to warm a model's endpoint before its measured
+# suite (the first inference on a freshly-deployed/idle model can be far slower
+# than steady state — a provider-side model cold-start, not the sandbox).
+WARMUP_PROMPT = "Reply with the single word: ready."
 DEFAULT_PROMPTS = [
     "Compute the sum of squares from 1 to 100 and print only the integer.",
     "Compute the first 20 Fibonacci numbers and print them as a comma-separated list.",
@@ -105,7 +109,7 @@ def _avg(xs: list[float]) -> float:
     return round(statistics.mean(xs), 1) if xs else 0.0
 
 
-def _summarize(records: list[dict[str, Any]], models: list[str]) -> None:
+def _summarize(records: list[dict[str, Any]], models: list[str], cold_start: dict[str, float] | None = None) -> None:
     print("\n" + "=" * 104)
     print("MODEL COMPARISON")
     print("=" * 104)
@@ -135,6 +139,12 @@ def _summarize(records: list[dict[str, Any]], models: list[str]) -> None:
             f"{n_install:>6}/{len(ok):<2}"
         )
     print("-" * 104)
+    if cold_start:
+        print("Cold-start (first/warm-up call per model, EXCLUDED from the averages above):")
+        for m in models:
+            if m in cold_start:
+                print(f"  - {m:<16} {cold_start[m] / 1000:.1f}s")
+        print("-" * 104)
     # Per-prompt, model-vs-model (first repeat only, for a readable snapshot).
     prompts = []
     for r in records:
@@ -179,9 +189,27 @@ async def run(args: argparse.Namespace) -> int:
     )
 
     records: list[dict[str, Any]] = []
+    cold_start: dict[str, float] = {}
     n = 0
     with SandboxPool.from_env() as pool:
         for model in models:
+            if args.warmup:
+                print(f"[bench] warming up {model} (excluded from averages)", file=sys.stderr)
+                warm = await _bench_one(
+                    pool=pool,
+                    model=model,
+                    prompt=WARMUP_PROMPT,
+                    disk=args.disk,
+                    project_endpoint=project_endpoint,
+                )
+                cold_start[model] = warm.get("total_wall_ms", 0.0)
+                print(
+                    f"[bench] {model} cold-start (first call): "
+                    f"{cold_start[model] / 1000:.1f}s",
+                    file=sys.stderr,
+                )
+                if args.gap_s > 0:
+                    await asyncio.sleep(args.gap_s)
             for rep in range(args.repeats):
                 for prompt in prompts:
                     n += 1
@@ -205,7 +233,7 @@ async def run(args: argparse.Namespace) -> int:
                         await asyncio.sleep(args.gap_s)
 
     (out_dir / "all_records.json").write_text(json.dumps(records, indent=2))
-    _summarize(records, models)
+    _summarize(records, models, cold_start)
     print(f"[bench] wrote {len(records)} records to {out_dir}", file=sys.stderr)
     return 0
 
@@ -218,6 +246,12 @@ def main() -> int:
     p.add_argument("--prompts", help="Path to a prompts file (one prompt per line). Default: built-in suite.")
     p.add_argument("--repeats", type=int, default=1, help="Repeats per (model, prompt) for averaging. Default: 1.")
     p.add_argument("--gap-s", type=float, default=3.0, help="Seconds to pause between runs. Default: 3.")
+    p.add_argument(
+        "--warmup",
+        action="store_true",
+        help="Send one throwaway call per model first to warm its endpoint; "
+        "excluded from the averages and reported separately as cold-start.",
+    )
     p.add_argument("--disk", default=local.DEFAULT_DISK, help=f"Sandbox disk image (default: {local.DEFAULT_DISK}).")
     p.add_argument("--out-dir", default="benchmark-results", help="Directory for per-run + aggregate JSON (gitignored). Default: benchmark-results.")
     args = p.parse_args()

@@ -227,6 +227,20 @@ rate limits, and every run is saved as JSON (`run_NNN_*.json` plus an
 aggregate `all_records.json`) under `--out-dir`. That folder defaults to
 `benchmark-results/` and is **gitignored** — the raw records stay local.
 
+> **Model cold-starts.** The *first* inference on a freshly-deployed or idle
+> model endpoint can be far slower than steady state (we've seen a first call
+> take ~52s vs ~3s warm). This is a **provider-side model cold-start, not the
+> sandbox** — the harness proves it: that time lands entirely in the `model`
+> bucket (per-call `model_call_ms`), the sandbox exec is ~0.1s, and since every
+> run leases its own fresh sandbox, a sandbox cold-start would recur on every
+> run (it doesn't — only the first *model* call is slow). Pass `--warmup` to
+> send one throwaway call per model first; it's excluded from the averages and
+> reported separately as a `Cold-start` line:
+>
+> ```bash
+> uv run --extra compare python scripts/compare_models.py --warmup --repeats 3
+> ```
+
 ### Interpreting the results
 
 The comparison table (one row per model, averaged over the successful runs):
