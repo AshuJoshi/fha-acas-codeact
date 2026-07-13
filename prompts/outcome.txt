@@ -1,0 +1,6 @@
+How many people are currently in space right now, and what are their names?
+Where is the International Space Station right now, and is it north or south of the equator?
+What is the current price of one Bitcoin in US dollars?
+What is the title and number of the latest xkcd comic?
+Fetch and print one random piece of advice from a public advice API.
+Using the third-party 'requests' library specifically, fetch https://api.github.com and print how many top-level keys the JSON response has.

@@ -1,0 +1,8 @@
+Install the 'humanize' package with pip, then use it to print the human-readable form of 1234567 seconds (as a time delta) and the ordinal of 42.
+Here is a buggy function: def median(xs): xs.sort(); n = len(xs); return xs[n // 2]. It is wrong for even-length lists. First demonstrate the bug by running it on [1, 2, 3, 4], then fix it to average the two middle values for even-length lists, and show the corrected result on the same input.
+Using the random module with NO fixed seed, repeatedly generate lists of 20 integers between 1 and 100 until you find one whose sum is a prime number. Print the list, its sum, and how many attempts it took.
+Implement quicksort from scratch (do not use sorted or list.sort), then verify it against Python's sorted() on 10 randomly generated lists of length 15. If all match, print 'ALL OK'; otherwise print the first list where they differ.
+Compare membership-test speed of a set vs a list: build both from range(100000), then time how long 2000 lookups of random values take in each. Print both timings in milliseconds and the speedup factor (list_time / set_time).
+Read the file '/work/notes.txt' and print how many lines it has. If the file does not exist, first create it with three lines of sample text, then read it and print the line count.
+Compute the 35th Fibonacci number with a deliberately naive recursive function and time how long it takes. If it takes more than 1 second, reimplement it iteratively, and print the result plus both timings.
+You are given the messy name list ['  Alice ', 'BOB', 'charlie  ', '', 'dave', 'Alice']. Clean it: decide and apply sensible rules (trim whitespace, normalize capitalization, drop empties, dedupe), print the cleaned list, and briefly note in comments what rules you chose.

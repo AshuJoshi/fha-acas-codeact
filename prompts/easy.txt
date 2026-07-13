@@ -1,0 +1,5 @@
+Compute the sum of squares from 1 to 100 and print only the integer.
+Compute the first 20 Fibonacci numbers and print them as a comma-separated list.
+Write and run a function that returns all prime numbers below 50, then print the list.
+Parse the CSV text 'a,b\n1,2\n3,4\n5,6' with the csv module and print the sum of column b.
+Reverse the string 'benchmarking' without using slicing, and print the result.

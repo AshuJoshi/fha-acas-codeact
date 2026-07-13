@@ -1,0 +1,3 @@
+Where is the International Space Station right now? Report its current latitude and longitude.
+What day of the week was 1 January 2000?
+How many prime numbers are there below one million?
