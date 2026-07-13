@@ -44,7 +44,7 @@ import run_local_codeact as local  # noqa: E402
 from acas_toolkit import SandboxPool  # noqa: E402
 
 
-DEFAULT_MODELS = ["gpt-5.4", "glm-5.2", "kimi-k2.7-code"]
+DEFAULT_MODELS = ["gpt-5.4", "glm-5.2", "kimi-k2.7-code", "deepseek-v4-pro"]
 # A trivial prompt used only to warm a model's endpoint before its measured
 # suite (the first inference on a freshly-deployed/idle model can be far slower
 # than steady state — a provider-side model cold-start, not the sandbox).
