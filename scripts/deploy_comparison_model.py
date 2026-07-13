@@ -120,8 +120,13 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
         "model_version": "1",
         "sku": "DataZoneStandard",
     },
+    "deepseek-v4-pro": {
+        "model_name": "FW-DeepSeek-V4-Pro",
+        "model_format": "Fireworks",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
 }
-
 
 def _require_env(name: str) -> str:
     val = os.environ.get(name)
