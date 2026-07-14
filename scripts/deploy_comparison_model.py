@@ -126,6 +126,25 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
         "model_version": "1",
         "sku": "DataZoneStandard",
     },
+    # OpenAI's open-weight release, hosted FIRST-PARTY by Azure (format
+    # "OpenAI-OSS", "sold directly by Azure" -> data stays in Microsoft, unlike
+    # the Fireworks partner MaaS models). Thematically the key comparison: an
+    # open-weight model vs the proprietary gpt-5.4 from the same vendor, AND a
+    # governance contrast (first-party open-weight vs partner-hosted open-weight).
+    # NOTE: the Fireworks FW-GPT-OSS-120B build is deprecated; use this instead.
+    # Qwen was PTU-only on this account, so it is not pay-go comparable.
+    "gpt-oss-120b": {
+        "model_name": "gpt-oss-120b",
+        "model_format": "OpenAI-OSS",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
+    "minimax-m2.5": {
+        "model_name": "FW-MiniMax-M2.5",
+        "model_format": "Fireworks",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
 }
 
 def _require_env(name: str) -> str:
