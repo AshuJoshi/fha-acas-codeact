@@ -120,6 +120,14 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
         "model_version": "1",
         "sku": "DataZoneStandard",
     },
+    # Kimi K3 launch (2026-07-28). Only DataZoneStandard is available so far
+    # (no provisioned SKUs yet) -- expected for a freshly-launched model.
+    "kimi-k3": {
+        "model_name": "FW-Kimi-K3",
+        "model_format": "Fireworks",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
     "deepseek-v4-pro": {
         "model_name": "FW-DeepSeek-V4-Pro",
         "model_format": "Fireworks",
