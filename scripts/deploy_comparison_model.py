@@ -153,6 +153,22 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
         "model_version": "1",
         "sku": "DataZoneStandard",
     },
+    # First-party OpenAI frontier tier, added specifically to test Kimi K3
+    # against the actual reference class the launch-week hype compares it to
+    # (not just our existing mid-tier lineup). Priced close to Kimi K3 ($3/$15):
+    # gpt-5.6-terra is $2.50/$15 standard tier.
+    "gpt-5.5": {
+        "model_name": "gpt-5.5",
+        "model_format": "OpenAI",
+        "model_version": "2026-04-24",
+        "sku": "GlobalStandard",
+    },
+    "gpt-5.6-terra": {
+        "model_name": "gpt-5.6-terra",
+        "model_format": "OpenAI",
+        "model_version": "2026-07-09",
+        "sku": "GlobalStandard",
+    },
 }
 
 def _require_env(name: str) -> str:

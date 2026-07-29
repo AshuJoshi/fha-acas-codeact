@@ -46,6 +46,8 @@ from acas_toolkit import SandboxPool  # noqa: E402
 
 DEFAULT_MODELS = [
     "gpt-5.4",
+    "gpt-5.5",
+    "gpt-5.6-terra",
     "glm-5.2",
     "kimi-k2.7-code",
     "kimi-k3",
