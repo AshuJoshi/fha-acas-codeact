@@ -105,6 +105,14 @@ def _chk_clean_names(blob: str, rec: dict[str, Any]) -> tuple[bool, str]:
     return (ok, "expected cleaned list Alice, Bob, Charlie, Dave")
 
 
+def _chk_day_of_week(blob: str, rec: dict[str, Any]) -> tuple[bool, str]:
+    return ("saturday" in blob.lower(), "expected 'Saturday' (1 Jan 2000)")
+
+
+def _chk_primes_below_1m(blob: str, rec: dict[str, Any]) -> tuple[bool, str]:
+    return ("78498" in blob, "expected 78498 primes below one million")
+
+
 # Ordered so more specific substrings win; matched against the prompt text.
 DETERMINISTIC: list[tuple[str, Checker]] = [
     ("sum of squares", _chk_sum_squares),
@@ -118,6 +126,8 @@ DETERMINISTIC: list[tuple[str, Checker]] = [
     ("35th fibonacci", _chk_fib35),
     ("messy name list", _chk_clean_names),
     ("notes.txt", _chk_notes_lines),
+    ("what day of the week", _chk_day_of_week),
+    ("prime numbers are there below one million", _chk_primes_below_1m),
 ]
 
 
