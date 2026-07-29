@@ -29,16 +29,36 @@ import statistics
 from pathlib import Path
 from typing import Any, Optional
 
-# Per-1M-token prices in USD. Leave empty until confirmed; models without an
-# entry show token counts only (cost columns print "n/a"). Fill from the Azure
-# model pricing page (gpt-5.4) and Fireworks / Azure partner pricing.
+# Per-1M-token prices in USD (Standard/list tier, input/output). Sourced
+# 2026-07-28 from each vendor's own pricing pages -- NOT Azure's billed rate.
+# Our benchmark runs go through Azure AI Foundry (gpt-5.4 via Azure OpenAI;
+# the rest as Fireworks/OpenAI-OSS partner MaaS deployments), and Azure's
+# metered price for a partner model is not guaranteed to equal the vendor's
+# direct list price -- treat these as directional, cross-market reference
+# points, not authoritative Azure invoicing. Confirm exact Azure meter rates
+# via the Azure Pricing Calculator before using this for real cost decisions.
+#   gpt-5.4:          OpenAI API pricing (developers.openai.com/api/docs/pricing),
+#                     "gpt-5.4 (<272K context length)" Standard tier.
+#   glm-5.2:          Fireworks serverless pricing (docs.fireworks.ai/serverless/pricing),
+#                     "GLM 5.2" Standard tier.
+#   kimi-k2.7-code:   Fireworks serverless pricing, "Kimi K2.7 Code" Standard tier.
+#   kimi-k3:          Fireworks serverless pricing, "Kimi K3" Standard tier
+#                     (cross-checked against OpenRouter: $3/$15, matches exactly).
+#   deepseek-v4-pro:  Fireworks serverless pricing, "DeepSeek V4 Pro" Standard tier.
+#   gpt-oss-120b:     Fireworks serverless pricing, "OpenAI GPT OSS 120B" Standard
+#                     tier -- reference only; Azure hosts this first-party
+#                     (format OpenAI-OSS), which may be priced independently.
+#   minimax-m2.5:     Fireworks does NOT serve this serverless (on-demand-GPU
+#                     only there); price is the OpenRouter market rate instead
+#                     (cheapest listed providers, e.g. Inceptron/DigitalOcean).
 PRICES: dict[str, dict[str, float]] = {
-    # "gpt-5.4": {"input": 0.0, "output": 0.0},
-    # "gpt-oss-120b": {"input": 0.0, "output": 0.0},
-    # "glm-5.2": {"input": 0.0, "output": 0.0},
-    # "kimi-k2.7-code": {"input": 0.0, "output": 0.0},
-    # "deepseek-v4-pro": {"input": 0.0, "output": 0.0},
-    # "minimax-m2.5": {"input": 0.0, "output": 0.0},
+    "gpt-5.4": {"input": 2.50, "output": 15.00},
+    "gpt-oss-120b": {"input": 0.15, "output": 0.60},
+    "glm-5.2": {"input": 1.40, "output": 4.40},
+    "kimi-k2.7-code": {"input": 0.95, "output": 4.00},
+    "kimi-k3": {"input": 3.00, "output": 15.00},
+    "deepseek-v4-pro": {"input": 1.74, "output": 3.48},
+    "minimax-m2.5": {"input": 0.15, "output": 0.90},
 }
 
 
