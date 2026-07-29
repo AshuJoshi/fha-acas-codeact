@@ -39,6 +39,13 @@ from typing import Any, Optional
 # via the Azure Pricing Calculator before using this for real cost decisions.
 #   gpt-5.4:          OpenAI API pricing (developers.openai.com/api/docs/pricing),
 #                     "gpt-5.4 (<272K context length)" Standard tier.
+#   gpt-5.5:          OpenAI API pricing, "gpt-5.5 (<272K context length)" Standard
+#                     tier, short-context row (input/output; ignores cached-input
+#                     and long-context rows for simplicity, same convention as gpt-5.4).
+#   gpt-5.6-terra:    OpenAI API pricing, "gpt-5.6-terra" Standard tier, short-context
+#                     row. Priced identically to gpt-5.4 ($2.50/$15) despite being a
+#                     newer/different tier name -- confirmed directly from the pricing
+#                     table, not assumed.
 #   glm-5.2:          Fireworks serverless pricing (docs.fireworks.ai/serverless/pricing),
 #                     "GLM 5.2" Standard tier.
 #   kimi-k2.7-code:   Fireworks serverless pricing, "Kimi K2.7 Code" Standard tier.
@@ -53,6 +60,8 @@ from typing import Any, Optional
 #                     (cheapest listed providers, e.g. Inceptron/DigitalOcean).
 PRICES: dict[str, dict[str, float]] = {
     "gpt-5.4": {"input": 2.50, "output": 15.00},
+    "gpt-5.5": {"input": 5.00, "output": 30.00},
+    "gpt-5.6-terra": {"input": 2.50, "output": 15.00},
     "gpt-oss-120b": {"input": 0.15, "output": 0.60},
     "glm-5.2": {"input": 1.40, "output": 4.40},
     "kimi-k2.7-code": {"input": 0.95, "output": 4.00},
