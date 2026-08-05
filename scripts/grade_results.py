@@ -43,6 +43,11 @@ from typing import Any, Callable, Optional
 
 PRIMES_BELOW_50 = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47}
 
+# Matches a genuine thousands-separated number ("78,498", "1,000,000"), not a
+# comma-separated LIST of numbers (each group after the first must be exactly
+# 3 digits, immediately followed by a word boundary).
+_THOUSANDS_RE = re.compile(r"\d{1,3}(?:,\d{3})+\b")
+
 Checker = Callable[[str, dict[str, Any]], tuple[bool, str]]
 
 
@@ -178,7 +183,12 @@ def _observed_blob(rec: dict[str, Any]) -> str:
         if isinstance(r, dict) and r.get("stdout"):
             parts.append(str(r["stdout"]))
     parts.append(str(rec.get("answer") or ""))
-    return "\n".join(parts)
+    blob = "\n".join(parts)
+    # Collapse thousands-separated numbers ("78,498" -> "78498") so numeric
+    # checkers match regardless of formatting. Bounded to genuine \d{3}
+    # groups with a trailing word boundary so a comma-separated LIST of
+    # numbers (e.g. "144,233,377,...") is left untouched.
+    return _THOUSANDS_RE.sub(lambda m: m.group(0).replace(",", ""), blob)
 
 
 def _behaviors(rec: dict[str, Any]) -> dict[str, Any]:
