@@ -95,6 +95,10 @@ def _avg(xs: list[float]) -> float:
     return statistics.mean(xs) if xs else 0.0
 
 
+def _median(xs: list[float]) -> float:
+    return statistics.median(xs) if xs else 0.0
+
+
 def _cost_per_task(model: str, in_tok: float, out_tok: float) -> Optional[float]:
     price = PRICES.get(model)
     if not price:
@@ -131,7 +135,7 @@ def main() -> int:
     print("=" * 108)
     hdr = (
         f"{'model':<18}{'runs':>6}{'ok':>5}{'turns':>7}{'in-tok':>9}{'out-tok':>9}"
-        f"{'tot-tok':>9}{'tok/s':>8}{'wall(s)':>9}{'$/task':>10}"
+        f"{'tot-tok':>9}{'tok/s':>8}{'wall_avg':>9}{'wall_med':>9}{'$/task':>10}"
     )
     print(hdr)
     print("-" * 108)
@@ -145,18 +149,20 @@ def main() -> int:
         tot_tok = _avg([r.get("total_tokens", 0) for r in rep])
         tps = _avg([r["output_tokens_per_s"] for r in rep if r.get("output_tokens_per_s")])
         wall = _avg([r.get("total_wall_ms", 0) for r in ok]) / 1000.0
+        wall_med = _median([r.get("total_wall_ms", 0) for r in ok]) / 1000.0
         cost = _cost_per_task(m, in_tok, out_tok)
         cost_cell = f"${cost:.5f}" if cost is not None else ("n/a" if not rep else "no price")
         tok_cell = lambda v: f"{v:.0f}" if rep else "n/a"  # noqa: E731
         print(
             f"{m:<18}{len(rs):>6}{len(ok):>4}/{len(rs):<1}"
             f"{turns:>6.1f}{tok_cell(in_tok):>9}{tok_cell(out_tok):>9}{tok_cell(tot_tok):>9}"
-            f"{(f'{tps:.1f}' if rep else 'n/a'):>8}{wall:>9.2f}{cost_cell:>10}"
+            f"{(f'{tps:.1f}' if rep else 'n/a'):>8}{wall:>9.2f}{wall_med:>9.2f}{cost_cell:>10}"
         )
     print("-" * 108)
     print(
         "in-tok grows with turns + a model's own verbosity (loop re-sends the "
-        "conversation each turn); tot-tok = in + out."
+        "conversation each turn); tot-tok = in + out. A large avg-vs-median gap "
+        "means one extreme run is skewing the average -- check individual records."
     )
     if not priced:
         print(
