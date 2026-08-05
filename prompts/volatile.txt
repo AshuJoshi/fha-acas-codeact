@@ -1,0 +1,3 @@
+Where is the International Space Station right now? Report its current latitude and longitude.
+How many people are currently in space right now, and what are their names?
+Where is the International Space Station right now, and is it north or south of the equator?
