@@ -154,7 +154,12 @@ def _print_tail_events(records: list[tuple[str, dict[str, Any]]], multiplier: fl
             tool_ms = rec.get("total_tool_ms", 0) / 1000
             overhead_ms = rec.get("agent_overhead_ms", 0) / 1000
             sig = _fmt_sig(_signature(rec))
-            tag = " [infra failure, not model behavior]" if rec.get("num_turns", 0) == 0 else ""
+            if rec.get("num_turns", 0) == 0:
+                tag = " [infra failure: rate limit/exception, not model behavior]"
+            elif tool_ms > model_ms:
+                tag = " [environment/tool hang: sandbox call time dominates, not model reasoning]"
+            else:
+                tag = ""
             print(
                 f"{model:<16} [{batch:<14}] wall={wall / 1000:7.1f}s "
                 f"({wall / med:.1f}x its own median {med / 1000:.1f}s){tag}  "
