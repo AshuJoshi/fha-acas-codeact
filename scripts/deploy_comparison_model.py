@@ -169,6 +169,22 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
         "model_version": "2026-07-09",
         "sku": "GlobalStandard",
     },
+    # M3 supersedes minimax-m2.5; kept alongside it (not replacing it) so the
+    # reasoning.txt battery can show a real before/after on the same vendor.
+    "minimax-m3": {
+        "model_name": "FW-MiniMax-M3",
+        "model_format": "Fireworks",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
+    # First Nvidia-lineage model in the comparison set (distinct training
+    # lineage from the OpenAI/Chinese-lab models already covered).
+    "nemotron-3-super-120b": {
+        "model_name": "FW-Nemotron-3-Super-120B-A12B-BF16",
+        "model_format": "Fireworks",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
 }
 
 def _require_env(name: str) -> str:

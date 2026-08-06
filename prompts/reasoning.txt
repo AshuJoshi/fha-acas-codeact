@@ -1,0 +1,20 @@
+Where is the International Space Station right now? Report its current latitude and longitude.
+What day of the week was 1 January 2000?
+How many prime numbers are there below one million?
+How many people are currently in space right now, and what are their names?
+Where is the International Space Station right now, and is it north or south of the equator?
+What is the current price of one Bitcoin in US dollars?
+What is the title and number of the latest xkcd comic?
+Fetch and print one random piece of advice from a public advice API.
+Using the third-party 'requests' library specifically, fetch https://api.github.com and print how many top-level keys the JSON response has.
+What is the current exchange rate between the US Dollar and the Euro, and how many Euros would $100 buy today?
+Who is the current Secretary-General of the United Nations, and when did their term begin?
+What time is it right now in Tokyo, Japan, and how many hours ahead of UTC is that?
+What is the current version of the Python programming language, and when was it released?
+Estimate how many seconds have elapsed since the Apollo 11 moon landing, as of right now.
+What is the most recently launched SpaceX orbital mission, and how many days ago did it launch?
+What is the current price of gold per ounce in US dollars?
+What is the population of the largest city in the world right now, and which city is it?
+Pick a well-known landmark or intersection in any country of your choice, and report its latitude and longitude coordinates.
+Who currently holds the world record for the marathon, and what is the record time?
+What is the current population of India, and how does it compare with the population of China today?

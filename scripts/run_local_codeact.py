@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from dotenv import load_dotenv
+import httpx
 
 
 def _load_azd_env() -> None:
@@ -126,6 +127,11 @@ DEFAULT_DISK = "python-3.13"
 DEFAULT_API = "chat"
 CHAT_API_VERSION = "2024-10-21"
 COGNITIVE_SCOPE = "https://cognitiveservices.azure.com/.default"
+# The openai SDK already retries 429/5xx internally with exponential backoff
+# (honoring Retry-After when the server sends one), default max_retries=2. Some
+# models (gpt-5.6-terra under sustained load) exhaust that before recovering,
+# so this raises the ceiling; it does not change the SDK's backoff algorithm.
+MAX_RETRIES = 6
 
 # Detects package-install activity so its wall time can be reported separately
 # from pure code execution (a pip install runs in the sandbox, so it lands in the
@@ -168,6 +174,37 @@ class _ModelCallTimer(ChatMiddleware):
         )
 
 
+class _RetryTracker:
+    """Observes raw HTTP request/response timing via httpx event hooks so a
+    429's backoff-and-retry wait (handled internally by the openai SDK) can be
+    measured and excluded from the reported wall time, instead of silently
+    inflating it."""
+
+    def __init__(self) -> None:
+        self._events: list[tuple[str, float, int | None]] = []
+
+    async def on_request(self, request: httpx.Request) -> None:
+        self._events.append(("request", time.monotonic(), None))
+
+    async def on_response(self, response: httpx.Response) -> None:
+        self._events.append(("response", time.monotonic(), response.status_code))
+
+    @property
+    def retry_count(self) -> int:
+        return sum(1 for kind, _, code in self._events if kind == "response" and code == 429)
+
+    @property
+    def retry_wait_ms(self) -> float:
+        total = 0.0
+        for i, (kind, ts, code) in enumerate(self._events):
+            if kind == "response" and code == 429:
+                for kind2, ts2, _ in self._events[i + 1 :]:
+                    if kind2 == "request":
+                        total += (ts2 - ts) * 1000.0
+                        break
+        return total
+
+
 def _result_to_dict(res: Any) -> Any:
     """Normalize a tool result (pydantic ExecResult or str) to JSON-able form."""
     if hasattr(res, "model_dump"):
@@ -186,13 +223,16 @@ async def _run_agent(
     prompt: str,
     project_endpoint: str,
     api: str = DEFAULT_API,
+    temperature: float | None = None,
 ) -> dict[str, Any]:
     """LOCAL AGENT: build the agent bound to ``sandbox_id`` and run ``prompt``.
 
     Captures every tool call (generated code/command + result + wall time) and
     the final answer. Returns a structured record. ``api`` selects the model
     call surface: ``chat`` (Chat Completions, token usage for all models) or
-    ``responses`` (Responses API, matches the FHA).
+    ``responses`` (Responses API, matches the FHA). ``temperature``, when left
+    as ``None`` (the default), is never sent, so the provider's own default
+    applies as-is; pass a value to pin it explicitly.
     """
     inner_execute = make_execute_code_tool(pool, sandbox_id)
     inner_shell = make_run_shell_tool(pool, sandbox_id)
@@ -258,6 +298,7 @@ async def _run_agent(
         return res
 
     timer = _ModelCallTimer()
+    retry_tracker = _RetryTracker()
     raw_client: AsyncAzureOpenAI | None = None
     if api == "chat":
         account = os.environ.get("FOUNDRY_ACCOUNT_NAME")
@@ -267,10 +308,15 @@ async def _run_agent(
                 "the azd env). Use --api responses to fall back to the FHA path."
             )
         token_provider = get_bearer_token_provider(AzureCliCredential(), COGNITIVE_SCOPE)
+        http_client = httpx.AsyncClient(
+            event_hooks={"request": [retry_tracker.on_request], "response": [retry_tracker.on_response]}
+        )
         raw_client = AsyncAzureOpenAI(
             azure_endpoint=f"https://{account}.openai.azure.com/",
             azure_ad_token_provider=token_provider,
             api_version=CHAT_API_VERSION,
+            max_retries=MAX_RETRIES,
+            http_client=http_client,
         )
         client: Any = OpenAIChatCompletionClient(model=model, async_client=raw_client)
     else:
@@ -285,6 +331,7 @@ async def _run_agent(
         instructions=INSTRUCTIONS,
         tools=[execute_code, run_shell],
         middleware=[timer],
+        default_options=({"temperature": temperature} if temperature is not None else None),
     )
 
     print(f"[local] model={model} sandbox={sandbox_id} api={api}", file=sys.stderr)
@@ -296,6 +343,14 @@ async def _run_agent(
         if raw_client is not None:
             await raw_client.close()
     total_ms = (time.monotonic() - t0) * 1000.0
+    retry_count = retry_tracker.retry_count
+    retry_wait_ms = round(retry_tracker.retry_wait_ms, 1)
+    if retry_count:
+        print(
+            f"[local] recovered from {retry_count} rate_limit_exceeded (429) "
+            f"response(s), {retry_wait_ms / 1000:.1f}s spent backing off",
+            file=sys.stderr,
+        )
 
     answer = getattr(result, "text", None) or str(result)
     model_call_ms = [round(x, 1) for x in timer.calls_ms]
@@ -330,6 +385,7 @@ async def _run_agent(
     return {
         "model": model,
         "api": api,
+        "temperature": temperature,
         "sandbox_id": sandbox_id,
         "prompt": prompt,
         "answer": answer,
@@ -337,6 +393,13 @@ async def _run_agent(
         # Wall time with package installs removed — comparable across models
         # regardless of whether one chose a third-party dependency.
         "wall_excl_install_ms": round(total_ms - install_ms, 1),
+        # 429 rate_limit_exceeded is retried internally by the openai SDK
+        # (see MAX_RETRIES); this is the backoff-and-retry wait time, already
+        # included in total_wall_ms above — subtract it for a model-behavior
+        # comparison unskewed by provider-side throttling.
+        "retry_count": retry_count,
+        "retry_wait_ms": retry_wait_ms,
+        "wall_excl_retry_ms": round(total_ms - retry_wait_ms, 1),
         # Turns = number of model (chat) round-trips.
         "num_turns": len(model_call_ms),
         "model_call_ms": model_call_ms,
@@ -431,6 +494,7 @@ async def run_once(args: argparse.Namespace) -> int:
                 prompt=args.prompt,
                 project_endpoint=project_endpoint,
                 api=args.api,
+                temperature=args.temperature,
             )
         else:
             t0 = time.monotonic()
@@ -444,6 +508,7 @@ async def run_once(args: argparse.Namespace) -> int:
                     prompt=args.prompt,
                     project_endpoint=project_endpoint,
                     api=args.api,
+                    temperature=args.temperature,
                 )
                 rec["sandbox_lease_ms"] = round(lease_ms, 1)
                 if args.keep_sandbox:
@@ -474,6 +539,12 @@ def main() -> int:
         f"API) but Fireworks report no tokens. Default: {DEFAULT_API}.",
     )
     p.add_argument("--sandbox-id", help="Reuse an existing sandbox instead of leasing.")
+    p.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Pin the model's sampling temperature. Default: unset (provider default applies).",
+    )
     p.add_argument("--disk", default=DEFAULT_DISK, help=f"Disk image for a leased sandbox (default: {DEFAULT_DISK}).")
     p.add_argument("--keep-sandbox", action="store_true", help="Do not delete a leased sandbox after the run.")
     p.add_argument("--json", help="Write the structured run record to this path.")

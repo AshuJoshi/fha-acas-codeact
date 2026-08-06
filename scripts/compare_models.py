@@ -54,6 +54,11 @@ DEFAULT_MODELS = [
     "deepseek-v4-pro",
     "gpt-oss-120b",
     "minimax-m2.5",
+    "minimax-m3",
+    # nemotron-3-super-120b intentionally NOT added yet: the exact catalog
+    # model (FW-Nemotron-3-Super-120B-A12B-BF16) is PTU-only on this account
+    # (no DataZoneStandard pay-go SKU) -- pending a decision (PTU vs the
+    # pay-go FW-Nemotron-3-Ultra-NVFP4 sibling vs skip).
 ]
 # A trivial prompt used only to warm a model's endpoint before its measured
 # suite (the first inference on a freshly-deployed/idle model can be far slower
@@ -69,7 +74,8 @@ DEFAULT_PROMPTS = [
 
 
 async def _bench_one(
-    *, pool: SandboxPool, model: str, prompt: str, disk: str, project_endpoint: str, api: str
+    *, pool: SandboxPool, model: str, prompt: str, disk: str, project_endpoint: str, api: str,
+    temperature: float | None = None,
 ) -> dict[str, Any]:
     """Run one (model, prompt) on a fresh sandbox; never raise — capture failures."""
     t0 = time.monotonic()
@@ -82,6 +88,7 @@ async def _bench_one(
                 prompt=prompt,
                 project_endpoint=project_endpoint,
                 api=api,
+                temperature=temperature,
             )
         rec["success"] = bool((rec.get("answer") or "").strip())
         rec["error"] = None
@@ -94,6 +101,9 @@ async def _bench_one(
             "error": f"{type(ex).__name__}: {ex}",
             "total_wall_ms": round((time.monotonic() - t0) * 1000.0, 1),
             "wall_excl_install_ms": round((time.monotonic() - t0) * 1000.0, 1),
+            "retry_count": 0,
+            "retry_wait_ms": 0.0,
+            "wall_excl_retry_ms": round((time.monotonic() - t0) * 1000.0, 1),
             "num_turns": 0,
             "model_call_ms": [],
             "total_model_ms": 0.0,
@@ -214,6 +224,7 @@ async def run(args: argparse.Namespace) -> int:
                     disk=args.disk,
                     project_endpoint=project_endpoint,
                     api=args.api,
+                    temperature=args.temperature,
                 )
                 cold_start[model] = warm.get("total_wall_ms", 0.0)
                 print(
@@ -237,6 +248,7 @@ async def run(args: argparse.Namespace) -> int:
                         disk=args.disk,
                         project_endpoint=project_endpoint,
                         api=args.api,
+                        temperature=args.temperature,
                     )
                     rec["repeat"] = rep + 1
                     records.append(rec)
@@ -276,6 +288,13 @@ def main() -> int:
         f"Default: {local.DEFAULT_API}.",
     )
     p.add_argument("--out-dir", default="benchmark-results", help="Directory for per-run + aggregate JSON (gitignored). Default: benchmark-results.")
+    p.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Pin the model's sampling temperature for every call in this battery. "
+        "Default: unset (provider default applies, unpinned).",
+    )
     args = p.parse_args()
     return asyncio.run(run(args))
 
