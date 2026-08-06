@@ -171,6 +171,42 @@ def _print_tail_events(records: list[tuple[str, dict[str, Any]]], multiplier: fl
         print("(none)")
 
 
+def _print_dispersion(records: list[tuple[str, dict[str, Any]]]) -> None:
+    """Spread stats per (model, prompt) group: how wide is the range around
+    the median, not just what the median is. Infra failures (turns=0, e.g. a
+    429) are excluded -- they're a reliability signal, not behavioral spread."""
+    groups: dict[tuple[str, str], list[float]] = defaultdict(list)
+    excluded: dict[tuple[str, str], int] = defaultdict(int)
+    for _, rec in records:
+        key = (rec.get("model", "?"), rec.get("prompt", ""))
+        if rec.get("num_turns", 0) == 0:
+            excluded[key] += 1
+            continue
+        groups[key].append(rec.get("total_wall_ms", 0) / 1000)
+
+    print("\n" + "=" * 100)
+    print("DISPERSION (spread of wall time for the same model + prompt, infra failures excluded)")
+    print("=" * 100)
+    hdr = f"{'model':<16}{'prompt':<45}{'n':>3}{'mean':>8}{'median':>8}{'stdev':>8}{'cv':>7}{'min':>7}{'max':>7}"
+    print(hdr)
+    print("-" * len(hdr))
+    for (model, prompt), walls in sorted(groups.items()):
+        if len(walls) < 2:
+            continue
+        mean = statistics.mean(walls)
+        median = statistics.median(walls)
+        stdev = statistics.stdev(walls)
+        cv = stdev / mean if mean else 0.0
+        excl = excluded.get((model, prompt), 0)
+        excl_note = f" (+{excl} excluded)" if excl else ""
+        print(
+            f"{model:<16}{prompt[:43]:<45}{len(walls):>3}{mean:>8.1f}{median:>8.1f}"
+            f"{stdev:>8.1f}{cv:>7.2f}{min(walls):>7.1f}{max(walls):>7.1f}{excl_note}"
+        )
+    print("-" * len(hdr))
+    print("cv = stdev/mean (coefficient of variation): >0.3 is high spread relative to the typical value.")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="*", default=["benchmark-results"])
@@ -185,6 +221,7 @@ def main() -> int:
 
     _print_path_variance(records)
     _print_tail_events(records, args.tail_multiplier)
+    _print_dispersion(records)
     return 0
 
 
