@@ -250,6 +250,34 @@ aggregate `all_records.json`) under `--out-dir`. That folder defaults to
 > uv run --extra compare python scripts/compare_models.py --warmup --repeats 3
 > ```
 
+### Fireworks prompt-cache affinity A/B
+
+Fireworks prompt caching is enabled by default. For serverless or multi-replica
+deployments, a stable routing hint improves the chance that related requests
+reach the replica holding their shared prompt prefix. The focused benchmark
+compares no routing hint against a stable `x-session-affinity` header for Kimi
+K3, MiniMax M3, DeepSeek V4 Pro, and GLM-5.2:
+
+```bash
+uv run --extra compare python scripts/prompt_cache_benchmark.py
+
+# Faster smoke test: one measured pass over the three tasks in each arm
+uv run --extra compare python scripts/prompt_cache_benchmark.py --repeats 1
+```
+
+Each model and arm gets one unmeasured priming request followed by tasks that
+share the same long repository-context prefix. The `control` arm sends no
+affinity hint; the `affinity` arm reuses a model-specific stable value. Results
+are written to `benchmark-results/prompt-cache` and report average model time,
+cached prompt tokens, and cache hit rate.
+
+Fireworks documents cache-token response headers for dedicated deployments.
+If Foundry does not forward those headers or cached-token usage for a
+DataZoneStandard deployment, the token and hit-rate columns show `n/a`; compare
+the `model(s)` columns between arms instead. The benchmark uses Chat
+Completions because the existing Responses path does not report Fireworks token
+usage.
+
 ### Interpreting the results
 
 The comparison table (one row per model, averaged over the successful runs):

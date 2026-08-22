@@ -167,6 +167,10 @@ class _ModelCallTimer(ChatMiddleware):
         self.calls_usage.append(
             {
                 "input_tokens": usage.get("input_token_count"),
+                # agent_framework_openai maps prompt_tokens_details.cached_tokens
+                # to this key (verified against the installed package source),
+                # NOT "cached_input_token_count".
+                "cached_input_tokens": usage.get("cache_read_input_token_count"),
                 "output_tokens": usage.get("output_token_count"),
                 "total_tokens": usage.get("total_token_count"),
                 "reasoning_tokens": usage.get("reasoning_output_token_count"),
@@ -182,12 +186,20 @@ class _RetryTracker:
 
     def __init__(self) -> None:
         self._events: list[tuple[str, float, int | None]] = []
+        self.cache_headers: list[dict[str, str]] = []
 
     async def on_request(self, request: httpx.Request) -> None:
         self._events.append(("request", time.monotonic(), None))
 
     async def on_response(self, response: httpx.Response) -> None:
         self._events.append(("response", time.monotonic(), response.status_code))
+        cache_headers = {
+            name: value
+            for name, value in response.headers.items()
+            if "cache" in name.lower() or name.lower().startswith("fireworks-prompt-")
+        }
+        if cache_headers:
+            self.cache_headers.append(cache_headers)
 
     @property
     def retry_count(self) -> int:
@@ -224,6 +236,7 @@ async def _run_agent(
     project_endpoint: str,
     api: str = DEFAULT_API,
     temperature: float | None = None,
+    session_affinity: str | None = None,
 ) -> dict[str, Any]:
     """LOCAL AGENT: build the agent bound to ``sandbox_id`` and run ``prompt``.
 
@@ -317,6 +330,11 @@ async def _run_agent(
             api_version=CHAT_API_VERSION,
             max_retries=MAX_RETRIES,
             http_client=http_client,
+            default_headers=(
+                {"x-session-affinity": session_affinity}
+                if session_affinity is not None
+                else None
+            ),
         )
         client: Any = OpenAIChatCompletionClient(model=model, async_client=raw_client)
     else:
@@ -362,6 +380,12 @@ async def _run_agent(
         return sum((u.get(key) or 0) for u in timer.calls_usage)
 
     input_tokens = _sum_tok("input_tokens")
+    cached_input_tokens = _sum_tok("cached_input_tokens")
+    cached_tokens_source = (
+        "reported"
+        if any(u.get("cached_input_tokens") is not None for u in timer.calls_usage)
+        else "none"
+    )
     output_tokens = _sum_tok("output_tokens")
     total_tokens = _sum_tok("total_tokens") or (input_tokens + output_tokens)
     reasoning_tokens = _sum_tok("reasoning_tokens")
@@ -386,6 +410,7 @@ async def _run_agent(
         "model": model,
         "api": api,
         "temperature": temperature,
+        "session_affinity": session_affinity,
         "sandbox_id": sandbox_id,
         "prompt": prompt,
         "answer": answer,
@@ -407,12 +432,15 @@ async def _run_agent(
         # Token usage.
         "tokens_source": tokens_source,
         "input_tokens": input_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "cached_tokens_source": cached_tokens_source,
         "output_tokens": output_tokens,
         "total_tokens": total_tokens,
         "reasoning_tokens": reasoning_tokens,
         "ms_per_output_token": ms_per_output_token,
         "output_tokens_per_s": output_tokens_per_s,
         "model_call_usage": timer.calls_usage,
+        "cache_response_headers": retry_tracker.cache_headers,
         "num_tool_calls": len(tool_calls),
         "total_tool_ms": total_tool_ms,
         # Sandbox bucket split: package installs vs actual code execution.
@@ -495,6 +523,7 @@ async def run_once(args: argparse.Namespace) -> int:
                 project_endpoint=project_endpoint,
                 api=args.api,
                 temperature=args.temperature,
+                session_affinity=args.session_affinity,
             )
         else:
             t0 = time.monotonic()
@@ -509,6 +538,7 @@ async def run_once(args: argparse.Namespace) -> int:
                     project_endpoint=project_endpoint,
                     api=args.api,
                     temperature=args.temperature,
+                    session_affinity=args.session_affinity,
                 )
                 rec["sandbox_lease_ms"] = round(lease_ms, 1)
                 if args.keep_sandbox:
@@ -544,6 +574,10 @@ def main() -> int:
         type=float,
         default=None,
         help="Pin the model's sampling temperature. Default: unset (provider default applies).",
+    )
+    p.add_argument(
+        "--session-affinity",
+        help="Stable x-session-affinity value for Fireworks prompt-cache routing.",
     )
     p.add_argument("--disk", default=DEFAULT_DISK, help=f"Disk image for a leased sandbox (default: {DEFAULT_DISK}).")
     p.add_argument("--keep-sandbox", action="store_true", help="Do not delete a leased sandbox after the run.")
