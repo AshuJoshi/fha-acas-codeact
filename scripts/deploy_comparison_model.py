@@ -169,6 +169,15 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
         "model_version": "2026-07-09",
         "sku": "GlobalStandard",
     },
+    # Microsoft's own first-party reasoning model, Preview lifecycle status on
+    # this account as of 2026-08-22. Pay-go GlobalStandard SKU (unlike Nemotron,
+    # no PTU-only blocker here).
+    "mai-thinking-1": {
+        "model_name": "MAI-Thinking-1",
+        "model_format": "Microsoft",
+        "model_version": "2026-06-01",
+        "sku": "GlobalStandard",
+    },
     # M3 supersedes minimax-m2.5; kept alongside it (not replacing it) so the
     # reasoning.txt battery can show a real before/after on the same vendor.
     "minimax-m3": {

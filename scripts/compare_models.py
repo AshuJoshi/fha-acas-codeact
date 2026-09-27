@@ -55,6 +55,7 @@ DEFAULT_MODELS = [
     "gpt-oss-120b",
     "minimax-m2.5",
     "minimax-m3",
+    "mai-thinking-1",
     # nemotron-3-super-120b intentionally NOT added yet: the exact catalog
     # model (FW-Nemotron-3-Super-120B-A12B-BF16) is PTU-only on this account
     # (no DataZoneStandard pay-go SKU) -- pending a decision (PTU vs the
