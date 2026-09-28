@@ -192,6 +192,9 @@ host). Sync it once:
 uv sync --extra compare
 ```
 
+The prompt suites in `prompts/` are described in
+[docs/prompt-suites.md](docs/prompt-suites.md).
+
 ### Single run
 
 ```bash
@@ -429,6 +432,7 @@ fha-acas-codeact/
 ├── docs/
 │   ├── architecture.md
 │   ├── deploy.md
+│   ├── prompt-suites.md           # What each benchmark prompt suite exercises
 │   └── cleanup.md                 # The full teardown procedure
 ├── pyproject.toml            # Host-side dev deps (orchestrator only)
 ├── uv.lock

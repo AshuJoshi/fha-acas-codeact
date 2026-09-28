@@ -37,3 +37,7 @@ build/
 
 # Local model-comparison benchmark output (raw run records + aggregates)
 benchmark-results/
+
+# New docs stay local unless explicitly approved; add approved ones with `git add -f`.
+# Already-tracked docs are unaffected. See them with `git status --ignored`.
+docs/*
