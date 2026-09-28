@@ -211,7 +211,7 @@ usage, the tool calls (with the **generated code**), and the final answer.
 ### A/B suite across models
 
 ```bash
-# Default suite (5 prompts) x DEFAULT_MODELS (gpt-5.4, glm-5.2, kimi-k2.7-code),
+# Default suite (5 prompts) x every model in DEFAULT_MODELS (compare_models.py),
 # 1 repeat, results written to ./benchmark-results (gitignored)
 uv run --extra compare python scripts/compare_models.py
 
@@ -249,6 +249,37 @@ aggregate `all_records.json`) under `--out-dir`. That folder defaults to
 > ```bash
 > uv run --extra compare python scripts/compare_models.py --warmup --repeats 3
 > ```
+
+### Long batched runs and repeat summaries
+
+For a long, multi-model stress run, `scripts/run_reasoning_overnight.sh` splits a
+prompt suite into batches and runs each through `compare_models.py` into its own
+`batchN/` folder (each call restarts `run_001` numbering, so batches cannot share
+a folder). It refuses to reuse a folder that already has results, and exits
+non-zero if any batch crashed.
+
+```bash
+# Full reasoning suite, all DEFAULT_MODELS, 5 repeats, batches of 5 prompts
+mkdir -p benchmark-results/my-run
+nohup caffeinate -i scripts/run_reasoning_overnight.sh benchmark-results/my-run \
+    > benchmark-results/my-run/overnight.log 2>&1 &
+disown
+
+# Other suite or settings; extra args pass through to compare_models.py
+PROMPTS=prompts/volatile.txt REPEATS=3 \
+    scripts/run_reasoning_overnight.sh benchmark-results/volatile-run --models gpt-5.4,glm-5.2
+```
+
+Summarize any mix of result folders (recurses into `batchN/`):
+
+```bash
+uv run python scripts/compare_reasoning_runs.py benchmark-results/my-run \
+    --json benchmark-results/my-run-summary.json
+```
+
+Its `ok` column only means a non-empty answer without a known failure marker;
+it is not a factual grade. `stable` counts prompts whose solution path (turns,
+tool sequence, installs, contacted domains) was identical on every repeat.
 
 ### Fireworks prompt-cache affinity A/B
 
@@ -387,6 +418,8 @@ fha-acas-codeact/
 │   ├── orchestrate_codeact.py     # Single-call smoke test
 │   ├── run_local_codeact.py       # Local agent harness (benchmark a model, no redeploy)
 │   ├── compare_models.py          # Multi-model A/B benchmark suite
+│   ├── run_reasoning_overnight.sh # Batched long runs of a prompt suite
+│   ├── compare_reasoning_runs.py  # Per-model summary of repeated runs
 │   ├── three_case_latency.py      # FS retention + microVM-pinning probe
 │   ├── timing_probe.py            # Cold-vs-warm latency profile
 │   ├── query_appinsights.py       # Post-deploy telemetry forensics
