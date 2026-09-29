@@ -11,7 +11,7 @@ license = { text = "MIT" }
 # The container that runs inside the FHA microVM has its own separate
 # dependency set in `agent/requirements.txt` / `agent/requirements.lock`.
 dependencies = [
-    "azure-containerapps-sandbox>=0.1.0b2,<0.2",
+    "azure-containerapps-sandbox>=0.1.0b4,<0.2",
     "azure-identity>=1.25.3",
     # Used by scripts/query_appinsights.py to read the Log Analytics
     # workspace that backs the project's Application Insights, and verify
@@ -32,7 +32,7 @@ dependencies = [
 # local path, e.g.:  "acas-toolkit @ file:///Users/ashu/TechDev/Projects/acas-toolkit"
 [project.optional-dependencies]
 compare = [
-    "acas-toolkit[agent-framework] @ https://github.com/AshuJoshi/acas-toolkit/archive/7ce71f250585aaee2ba9338cd0596611bf901ada.zip",
+    "acas-toolkit[agent-framework] @ https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip",
 ]
 
 [tool.uv]

@@ -33,7 +33,7 @@ wheels = [
 [[package]]
 name = "acas-toolkit"
 version = "0.1.0"
-source = { url = "https://github.com/AshuJoshi/acas-toolkit/archive/7ce71f250585aaee2ba9338cd0596611bf901ada.zip" }
+source = { url = "https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip" }
 dependencies = [
     { name = "azure-containerapps-sandbox" },
     { name = "azure-identity" },
@@ -44,7 +44,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
 ]
-sdist = { hash = "sha256:2060f8c7bdd5225ca2d6860687a3c13b063b8478572ed4744b070166d472162e" }
+sdist = { hash = "sha256:a915cda9345ade723670ccac66c3e4ed6d07e38f97bfdfc80d2b5216b34ab4da" }
 
 [package.optional-dependencies]
 agent-framework = [
@@ -56,7 +56,7 @@ agent-framework = [
 requires-dist = [
     { name = "agent-framework", marker = "extra == 'agent-framework'", specifier = ">=1.9,<2" },
     { name = "agent-framework-foundry", marker = "extra == 'agent-framework'", specifier = ">=1.9,<2" },
-    { name = "azure-containerapps-sandbox", specifier = ">=0.1.0b2,<0.2" },
+    { name = "azure-containerapps-sandbox", specifier = ">=0.1.0b4,<0.2" },
     { name = "azure-identity", specifier = ">=1.25.3" },
     { name = "azure-monitor-opentelemetry", specifier = ">=1.8.8" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -369,7 +369,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "agent-framework-core" },
     { name = "hyperlight-sandbox" },
-    { name = "hyperlight-sandbox-backend-wasm", marker = "(python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version < '3.14' and platform_machine == 'AMD64' and sys_platform == 'win32')" },
+    { name = "hyperlight-sandbox-backend-wasm" },
     { name = "hyperlight-sandbox-python-guest" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/1d/06b3b6adf46315a074fa458af00aac5ab37540b313f091cfd52217ee1c5e/agent_framework_hyperlight-1.0.0b260709.tar.gz", hash = "sha256:04ded1f1ffe2ad4de3bfd5f648411db585baf9659d8c44501760c473bd68fad8", size = 22165, upload-time = "2026-07-10T03:42:32.531Z" }
@@ -583,9 +583,9 @@ name = "aiologic"
 version = "0.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "sniffio", marker = "python_full_version < '3.14'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
-    { name = "wrapt", marker = "python_full_version < '3.14'" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f1/7a/d51f2fde1e8ae8a83431f8e97b7a71e9358cdb1d4d2ce6be387fa44d68de/aiologic-0.17.1.tar.gz", hash = "sha256:2e1b93b9e88ced318c2a63ad7b382688f40cbfe40e3d42258d49dc9c5aea179d", size = 252354, upload-time = "2026-06-27T20:41:33.25Z" }
 wheels = [
@@ -715,7 +715,7 @@ wheels = [
 
 [[package]]
 name = "azure-containerapps-sandbox"
-version = "0.1.0b3"
+version = "0.1.0b4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -724,9 +724,9 @@ dependencies = [
     { name = "azure-mgmt-core" },
     { name = "certifi" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/29/06/03c9a22b7f35a8284fc91a3f2873dbc56328f93e5f2cac49d70d662f83fd/azure_containerapps_sandbox-0.1.0b3.tar.gz", hash = "sha256:8ad5c68f13b284810bb824ea8eb64cd408b5b559824e6e0d3d7b1470ef5e373b", size = 52454, upload-time = "2026-06-18T17:17:21.709Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/c3/e84c8ffbfa88776c16493e8373436264b1a9c4b5099756506c35041dcd87/azure_containerapps_sandbox-0.1.0b4.tar.gz", hash = "sha256:8db267a11aea37e7b42aa46eb769bc2f2186a8f79790d20a73c1652571902dd0", size = 53352, upload-time = "2026-07-17T22:44:56.423Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c5/5d/413892c19fa1e2a691d4570d34e7a4d861934ecffc0183b7928bb41549ba/azure_containerapps_sandbox-0.1.0b3-py3-none-any.whl", hash = "sha256:aece0ee3f383aaf54f4698851b505e792be466490ac1009c4a99353dec641dac", size = 81373, upload-time = "2026-06-18T17:17:22.858Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/09/6d3e7dc7c060f7e7b3a58e91d5acd3bf2c5fa6a4b2b5a6eca7852955eaaf/azure_containerapps_sandbox-0.1.0b4-py3-none-any.whl", hash = "sha256:a4eff5ffe8ef941132b517ef768064626d0f78c4c21ebd7268d74935e1444f0a", size = 82310, upload-time = "2026-07-17T22:44:57.621Z" },
 ]
 
 [[package]]
@@ -1192,8 +1192,8 @@ name = "culsans"
 version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiologic", marker = "python_full_version < '3.14'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "aiologic" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d9/e3/49afa1bc180e0d28008ec6bcdf82a4072d1c7a41032b5b759b60814ca4b0/culsans-0.11.0.tar.gz", hash = "sha256:0b43d0d05dce6106293d114c86e3fb4bfc63088cfe8ff08ed3fe36891447fe33", size = 107546, upload-time = "2025-12-31T23:15:38.196Z" }
 wheels = [
@@ -1281,8 +1281,8 @@ compare = [
 
 [package.metadata]
 requires-dist = [
-    { name = "acas-toolkit", extras = ["agent-framework"], marker = "extra == 'compare'", url = "https://github.com/AshuJoshi/acas-toolkit/archive/7ce71f250585aaee2ba9338cd0596611bf901ada.zip" },
-    { name = "azure-containerapps-sandbox", specifier = ">=0.1.0b2,<0.2" },
+    { name = "acas-toolkit", extras = ["agent-framework"], marker = "extra == 'compare'", url = "https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip" },
+    { name = "azure-containerapps-sandbox", specifier = ">=0.1.0b4,<0.2" },
     { name = "azure-identity", specifier = ">=1.25.3" },
     { name = "azure-monitor-query", specifier = ">=1.4" },
     { name = "httpx", specifier = ">=0.28.1,<1.0" },

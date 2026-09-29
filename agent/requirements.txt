@@ -11,9 +11,9 @@
 # re-introduce the umbrella). acas_toolkit.integrations.agent_framework imports
 # `from agent_framework import tool`, satisfied by agent-framework-core here.
 # The container installs from requirements.lock with --no-deps.
-acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/7ce71f250585aaee2ba9338cd0596611bf901ada.zip
+acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip
 agent-framework-core>=1.11,<2
 agent-framework-foundry>=1.10,<2
 agent-framework-foundry-hosting
-azure-containerapps-sandbox>=0.1.0b2,<0.2
+azure-containerapps-sandbox>=0.1.0b4,<0.2
 python-dotenv>=1.0
