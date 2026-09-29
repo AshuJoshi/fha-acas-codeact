@@ -75,7 +75,7 @@ var roleIds = {
 }
 
 // --- Existing-resource references (lookups, not new deployments) ---
-resource sandboxGroup 'Microsoft.App/sandboxGroups@2026-02-01-preview' existing = {
+resource sandboxGroup 'Microsoft.App/sandboxGroups@2026-07-01' existing = {
   name: sandboxGroupName
 }
 
