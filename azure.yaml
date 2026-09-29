@@ -23,7 +23,8 @@ services:
                     version: ${AZURE_AI_MODEL_VERSION}
                   name: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
                   sku:
-                    capacity: 10
+                    # Literal int (extension decodes as JSON int); keep equal to AZURE_AI_MODEL_CAPACITY.
+                    capacity: 30
                     name: ${AZURE_AI_MODEL_SKU_NAME}
             startupCommand: python main.py
 infra:
