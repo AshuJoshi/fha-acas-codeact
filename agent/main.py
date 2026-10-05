@@ -26,7 +26,6 @@ from acas_toolkit.integrations.agent_framework import (
     make_execute_code_tool,
     make_run_shell_tool,
 )
-from acas_toolkit.sandbox_factory import make_sandbox_client
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
 from pydantic import Field
@@ -40,37 +39,6 @@ if TYPE_CHECKING:
 
 load_dotenv()
 
-
-class _ManagedIdentityPool(SandboxPool):
-    """SandboxPool that opens using DefaultAzureCredential instead of
-    AzureCliCredential.
-
-    The standard SandboxPool.open() calls ``az group create`` via subprocess
-    and uses AzureCliCredential for ARM operations.  Both paths fail inside an
-    FHA container where the az CLI is absent but a platform managed identity
-    is available via IMDS.
-
-    This subclass skips the ensure-RG step (the resource group and sandbox
-    group are assumed to already exist) and passes DefaultAzureCredential
-    explicitly to make_sandbox_client so neither the control-plane GET nor the
-    data-plane client ever needs to spawn az.
-    """
-
-    def open(self) -> "SandboxPool":
-        cfg = self.config
-        cred = DefaultAzureCredential(
-            exclude_azure_cli_credential=True,
-            exclude_interactive_browser_credential=True,
-        )
-        self._clients = make_sandbox_client(
-            subscription_id=cfg.subscription_id,
-            resource_group=cfg.resource_group,
-            sandbox_group=cfg.sandbox_group,
-            credential=cred,
-        )
-        if cfg.warm_size > 0:
-            self._start_warmer()
-        return self
 
 INSTRUCTIONS = """\
 You are fha-acas-codeact, a Responses hosted agent.
@@ -150,7 +118,15 @@ def _ensure_pool() -> SandboxPool:
     with _STATE_LOCK:
         if _POOL is not None:
             return _POOL
-        pool_cm = _ManagedIdentityPool(SandboxPoolConfig.from_env())
+        # Managed identity only (no az CLI here); Bicep owns the RG and sandbox group.
+        pool_cm = SandboxPool(
+            SandboxPoolConfig.from_env(),
+            credential=DefaultAzureCredential(
+                exclude_azure_cli_credential=True,
+                exclude_interactive_browser_credential=True,
+            ),
+            ensure_group=False,
+        )
         try:
             pool = pool_cm.__enter__()
         except Exception as ex:

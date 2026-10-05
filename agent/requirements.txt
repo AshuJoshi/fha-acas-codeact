@@ -11,7 +11,7 @@
 # re-introduce the umbrella). acas_toolkit.integrations.agent_framework imports
 # `from agent_framework import tool`, satisfied by agent-framework-core here.
 # The container installs from requirements.lock with --no-deps.
-acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip
+acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/0e98022ed2933f242800c45413b7ce3e558619c4.zip
 agent-framework-core>=1.11,<2
 agent-framework-foundry>=1.10,<2
 agent-framework-foundry-hosting

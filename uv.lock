@@ -33,7 +33,7 @@ wheels = [
 [[package]]
 name = "acas-toolkit"
 version = "0.1.0"
-source = { url = "https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip" }
+source = { url = "https://github.com/AshuJoshi/acas-toolkit/archive/0e98022ed2933f242800c45413b7ce3e558619c4.zip" }
 dependencies = [
     { name = "azure-containerapps-sandbox" },
     { name = "azure-identity" },
@@ -44,7 +44,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
 ]
-sdist = { hash = "sha256:a915cda9345ade723670ccac66c3e4ed6d07e38f97bfdfc80d2b5216b34ab4da" }
+sdist = { hash = "sha256:4cac0a63f82f82c02ef82489ea8fa6df29f941f36dc3ff31475e678fcce20a5d" }
 
 [package.optional-dependencies]
 agent-framework = [
@@ -1281,7 +1281,7 @@ compare = [
 
 [package.metadata]
 requires-dist = [
-    { name = "acas-toolkit", extras = ["agent-framework"], marker = "extra == 'compare'", url = "https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip" },
+    { name = "acas-toolkit", extras = ["agent-framework"], marker = "extra == 'compare'", url = "https://github.com/AshuJoshi/acas-toolkit/archive/0e98022ed2933f242800c45413b7ce3e558619c4.zip" },
     { name = "azure-containerapps-sandbox", specifier = ">=0.1.0b4,<0.2" },
     { name = "azure-identity", specifier = ">=1.25.3" },
     { name = "azure-monitor-query", specifier = ">=1.4" },

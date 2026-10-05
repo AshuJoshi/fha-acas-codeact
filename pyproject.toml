@@ -32,11 +32,10 @@ dependencies = [
 # local path, e.g.:  "acas-toolkit @ file:///Users/ashu/TechDev/Projects/acas-toolkit"
 [project.optional-dependencies]
 compare = [
-    "acas-toolkit[agent-framework] @ https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip",
+    "acas-toolkit[agent-framework] @ https://github.com/AshuJoshi/acas-toolkit/archive/0e98022ed2933f242800c45413b7ce3e558619c4.zip",
 ]
 
 [tool.uv]
-# `azure-containerapps-sandbox` is currently a preview package on PyPI;
-# scope the pre-release allowance to that package only so we don't
-# accidentally pull dev releases of httpx / azure-identity / etc.
-prerelease = "if-necessary-or-explicit"
+# Stable first, prerelease only when nothing stable satisfies (the ACAS SDK);
+# keeps dev releases of httpx / azure-identity / etc. out of the lock.
+prerelease = "if-necessary"

@@ -2,7 +2,7 @@
 #    uv pip compile agent/requirements.txt --prerelease=allow --python-version 3.12 --python-platform x86_64-unknown-linux-gnu --no-strip-extras --emit-index-url -o agent/requirements.lock
 --index-url https://pypi.org/simple
 
-acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/d0d5eb048c397b6617f6603a38375024ea3b8ce1.zip
+acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/0e98022ed2933f242800c45413b7ce3e558619c4.zip
     # via -r agent/requirements.txt
 agent-framework-core==1.11.0
     # via
