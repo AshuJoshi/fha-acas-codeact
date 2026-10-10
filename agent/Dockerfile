@@ -17,7 +17,7 @@ WORKDIR /app/user_agent
 #
 # To refresh the lock locally:
 #     uv pip compile agent/requirements.txt \
-#         --prerelease=allow \
+#         --prerelease=if-necessary \
 #         --python-version 3.12 \
 #         --python-platform x86_64-unknown-linux-gnu \
 #         --no-strip-extras \

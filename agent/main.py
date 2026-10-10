@@ -265,22 +265,6 @@ def run_shell(
         return f"<error initializing or executing ACAS run_shell: {ex}>"
 
 
-async def _reset_sandbox_id_after(
-    inner: "AsyncIterable[ResponseStreamEvent | dict[str, Any]]",
-    token: Any,
-) -> "AsyncIterable[ResponseStreamEvent | dict[str, Any]]":
-    """Pass through the response stream, then reset the sandbox-id ContextVar
-    once it is exhausted."""
-    try:
-        async for event in inner:
-            yield event
-    finally:
-        try:
-            _CURRENT_SANDBOX_ID.reset(token)
-        except (ValueError, LookupError):
-            pass
-
-
 class _ContextCapturingHostServer(ResponsesHostServer):
     """Subclass that extracts the per-request ``x-acas-sandbox-id`` header
     from the inbound ``ResponseContext`` and publishes it on a ContextVar
@@ -292,27 +276,34 @@ class _ContextCapturingHostServer(ResponsesHostServer):
         context: "ResponseContext",
         cancellation_signal: asyncio.Event,
     ) -> "AsyncIterable[ResponseStreamEvent | dict[str, Any]]":
-        # Publish the sandbox id in THIS task's context BEFORE super() builds
-        # the agent machinery, so any tasks/coroutines it spawns (and the async
-        # tool bodies) inherit it. The previous approach set the ContextVar
-        # inside a nested async generator, which under AF >=1.11 was too late /
-        # in the wrong context, so the tools read None and fell to the slow path.
+        # Hosting >=1.0.0b260827: the base _handle_response is an async
+        # generator, so iterate it; ``await super()...`` raises and returns 500.
         headers = {
             k.lower(): v
             for k, v in (getattr(context, "client_headers", {}) or {}).items()
         }
-        metadata = getattr(request, "metadata", None) or {}
-        # request.metadata is a Mapping-like object (not necessarily a dict),
-        # so access via .get() rather than isinstance(..., dict).
+        # agentserver-responses >=2.x: CreateResponse is a dict with no
+        # ``.metadata`` attribute, so read the key first and fall back to the attribute.
+        metadata = (request.get("metadata") if isinstance(request, dict) else None) or getattr(
+            request, "metadata", None
+        ) or {}
         try:
             sbx_id = metadata.get(SANDBOX_METADATA_KEY)
         except (AttributeError, TypeError):
             sbx_id = None
-        # Fallback to the (usually platform-stripped) custom header.
+        # Fallback to the custom header (empty on protocol 2.0.0 Responses).
         sbx_id = sbx_id or headers.get(SANDBOX_HEADER_NAME)
         token = _CURRENT_SANDBOX_ID.set(sbx_id)
-        inner = await super()._handle_response(request, context, cancellation_signal)
-        return _reset_sandbox_id_after(inner, token)
+        try:
+            async for event in super()._handle_response(
+                request, context, cancellation_signal
+            ):
+                yield event
+        finally:
+            try:
+                _CURRENT_SANDBOX_ID.reset(token)
+            except (ValueError, LookupError):
+                pass
 
 
 def main() -> None:
