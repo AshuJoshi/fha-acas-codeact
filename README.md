@@ -95,9 +95,6 @@ uv run python scripts/orchestrate_codeact.py "show /etc/os-release" \
 # Keep the sandbox around for the next call
 uv run python scripts/orchestrate_codeact.py "install requests" \
     --keep-sandbox
-
-# Force a fresh chat session (new per-conversation isolation)
-uv run python scripts/orchestrate_codeact.py "import this" --new-session
 ```
 
 ---

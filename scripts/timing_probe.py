@@ -6,11 +6,10 @@ so every warm call genuinely lands on the same FHA microVM and the same
 agent process. Reports per-call wall-clock latency plus a cold-vs-warm
 summary and a microVM-stability assertion.
 
-**How session pinning actually works.** ``x-ms-chat-isolation-key`` only
-gates *access* (it is the partition key in Header isolation mode). It
-does NOT pin the session to a microVM. The only thing that does is
-sending the prior call's response ``id`` back as ``previous_response_id``
-in the next request body. This probe chains it across every warm call.
+**How session pinning actually works.** The only thing that pins the
+session to a microVM is sending the prior call's response ``id`` back as
+``previous_response_id`` in the next request body. This probe chains it
+across every warm call.
 Without chaining the platform is free to route each call to a different
 microVM — which invalidates a 'warm-call' measurement entirely.
 
@@ -64,7 +63,6 @@ import os
 import re
 import sys
 import time
-import uuid
 from pathlib import Path
 
 _BOOT_ID_RE = re.compile(
@@ -183,13 +181,10 @@ def main() -> int:
 
     cred = DefaultAzureCredential()
 
-    # One sandbox + one chat-id for the whole run. The chat-id only gates
-    # access; the actual microVM/session pin is `previous_response_id`,
-    # chained between calls below. Same sandbox-id keeps the ACAS
+    # One sandbox for the whole run. The microVM/session pin is
+    # `previous_response_id`, chained between calls below. Same sandbox-id keeps the ACAS
     # `SandboxClient` handle cached in the agent process so tool-side
     # state (files, installed packages) persists across turns.
-    chat_id = f"probe-{uuid.uuid4().hex[:12]}"
-    print(f"[probe] chat-isolation-key = {chat_id}", file=sys.stderr)
 
     t_create0 = time.monotonic()
     sandbox_id = _create_sandbox(
@@ -232,7 +227,6 @@ def main() -> int:
                         api_version=args.api_version,
                         prompt=prompt,
                         sandbox_id=sandbox_id,
-                        chat_id=chat_id,
                         timeout=args.timeout,
                         previous_response_id=prev_resp_id,
                     )
@@ -241,7 +235,7 @@ def main() -> int:
                 except SystemExit as ex:
                     err = (
                         f"SystemExit({ex.code}) — HTTP error "
-                        f"(likely cold-FHA SSL 500)"
+                        f"(response body printed above)"
                     )
                 except Exception as ex:
                     err = f"{type(ex).__name__}: {ex}"

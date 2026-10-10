@@ -7,9 +7,7 @@ microVM is cold, whether the same Responses-session is reused (which
 requires chaining ``previous_response_id``), and whether the sandbox
 filesystem retains state from a prior call.
 
-**Why ``previous_response_id`` and NOT ``x-ms-chat-isolation-key``.**
-``x-ms-chat-isolation-key`` only gates *access* (who is allowed to
-reach a session). For the Responses protocol the only thing that
+**Why ``previous_response_id``.** For the Responses protocol the only thing that
 actually pins subsequent calls to the **same microVM** (same
 ``/proc/sys/kernel/random/boot_id``, same agent ``pid``) is sending
 the prior call's response ``id`` as ``previous_response_id`` in the
@@ -118,7 +116,6 @@ def _invoke_with_retry(
     agent: str,
     api_version: str,
     sandbox_id: str,
-    chat_id: str,
     timeout: float,
     previous_response_id: str | None,
     max_attempts: int = 3,
@@ -128,7 +125,6 @@ def _invoke_with_retry(
     (elapsed_ms, error_or_None, text, envelope_or_None).
     """
     print(f"\n[probe] ── {label} ──", file=sys.stderr)
-    print(f"[probe]   chat   = {chat_id}", file=sys.stderr)
     print(f"[probe]   prev_resp = {previous_response_id or '-'}", file=sys.stderr)
     print(f"[probe]   prompt = {prompt!r}", file=sys.stderr)
 
@@ -149,13 +145,12 @@ def _invoke_with_retry(
                 api_version=api_version,
                 prompt=prompt,
                 sandbox_id=sandbox_id,
-                chat_id=chat_id,
                 timeout=timeout,
                 previous_response_id=previous_response_id,
             )
             text = _extract_text(envelope).strip()
         except SystemExit as ex:
-            err = f"SystemExit({ex.code}) — HTTP error (likely cold-FHA SSL 500)"
+            err = f"SystemExit({ex.code}): HTTP error (response body printed above)"
         except Exception as ex:
             err = f"{type(ex).__name__}: {ex}"
         dt_ms = (time.monotonic() - t0) * 1000.0
@@ -228,10 +223,6 @@ def main() -> int:
     # (per acas_toolkit.executor docstring + empirical SDK verification).
     file_path = "/work/probe.txt"
 
-    # chat-isolation-key is unique per run (only gates access). The actual
-    # session pin is previous_response_id, chained below.
-    chat_id = f"probe-{uuid.uuid4().hex[:12]}"
-    print(f"[probe] chat-isolation-key = {chat_id}", file=sys.stderr)
     print(f"[probe] planted token      = {token}", file=sys.stderr)
     print(f"[probe] file path          = {file_path}", file=sys.stderr)
 
@@ -283,7 +274,7 @@ def main() -> int:
             label="Case 1 — cold FHA, warm sandbox (plant token)",
             prompt=prompt_case1, endpoint=endpoint, agent=args.agent,
             api_version=args.api_version, sandbox_id=sandbox_id,
-            chat_id=chat_id, timeout=args.timeout,
+            timeout=args.timeout,
             previous_response_id=None,
             max_attempts=args.max_attempts, retry_gap_s=args.retry_gap_s,
         )
@@ -300,7 +291,7 @@ def main() -> int:
             label="Case 2 — warm FHA, same session, warm sandbox",
             prompt=prompt_case2, endpoint=endpoint, agent=args.agent,
             api_version=args.api_version, sandbox_id=sandbox_id,
-            chat_id=chat_id, timeout=args.timeout,
+            timeout=args.timeout,
             previous_response_id=prev_resp_id,
             max_attempts=args.max_attempts, retry_gap_s=args.retry_gap_s,
         )
@@ -317,7 +308,7 @@ def main() -> int:
             label="Case 3 — sandbox FS retention (read planted token)",
             prompt=prompt_case3, endpoint=endpoint, agent=args.agent,
             api_version=args.api_version, sandbox_id=sandbox_id,
-            chat_id=chat_id, timeout=args.timeout,
+            timeout=args.timeout,
             previous_response_id=prev_resp_id,
             max_attempts=args.max_attempts, retry_gap_s=args.retry_gap_s,
         )

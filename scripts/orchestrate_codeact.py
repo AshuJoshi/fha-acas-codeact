@@ -58,7 +58,6 @@ import json
 import os
 import sys
 import time
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -201,7 +200,6 @@ def _invoke_agent(
     api_version: str,
     prompt: str,
     sandbox_id: str,
-    chat_id: str | None,
     timeout: float,
     previous_response_id: str | None = None,
 ) -> dict[str, Any]:
@@ -215,8 +213,6 @@ def _invoke_agent(
         "Foundry-Features": FEATURES_HEADER,
         SANDBOX_HEADER: sandbox_id,
     }
-    if chat_id:
-        headers["x-ms-chat-isolation-key"] = chat_id
 
     body: dict[str, Any] = {"input": prompt}
     # Pass the pre-created sandbox id to the agent via the Responses request
@@ -226,14 +222,13 @@ def _invoke_agent(
     body["metadata"] = {"acas_sandbox_id": sandbox_id}
     if previous_response_id:
         # This is what actually pins the Responses session to the same FHA
-        # microVM (same boot_id, same agent pid). The chat-isolation-key
-        # only gates ACCESS; it does NOT pin the session.
+        # microVM (same boot_id, same agent pid).
         body["previous_response_id"] = previous_response_id
 
     print(f"[orchestrate] POST {url}", file=sys.stderr)
     print(
         f"[orchestrate]   agent={agent_name}  sandbox={sandbox_id}  "
-        f"chat={chat_id or '-'}  prev_resp={previous_response_id or '-'}",
+        f"prev_resp={previous_response_id or '-'}",
         file=sys.stderr,
     )
     t0 = time.monotonic()
@@ -298,15 +293,6 @@ def main() -> int:
     )
     p.add_argument("--api-version", default=DEFAULT_API_VERSION)
     p.add_argument(
-        "--new-session",
-        action="store_true",
-        help="Mint a random x-ms-chat-isolation-key so the platform spins up a fresh session.",
-    )
-    p.add_argument(
-        "--chat-id",
-        help="Use this x-ms-chat-isolation-key (overrides --new-session).",
-    )
-    p.add_argument(
         "--subscription-id",
         default=os.environ.get("ACAS_SUBSCRIPTION_ID"),
     )
@@ -360,10 +346,6 @@ def main() -> int:
         )
         own_sandbox = True
 
-    chat_id = args.chat_id
-    if args.new_session and not chat_id:
-        chat_id = f"chat-{uuid.uuid4().hex[:12]}"
-
     try:
         envelope = _invoke_agent(
             project_endpoint=endpoint,
@@ -371,7 +353,6 @@ def main() -> int:
             api_version=args.api_version,
             prompt=args.prompt,
             sandbox_id=sandbox_id,
-            chat_id=chat_id,
             timeout=args.timeout,
         )
     finally:
