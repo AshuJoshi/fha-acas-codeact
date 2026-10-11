@@ -97,7 +97,7 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
 // exists on the project, the Foundry hosted-agent platform automatically:
 //
 //   1. Injects ``APPLICATIONINSIGHTS_CONNECTION_STRING`` into the agent
-//      container's environment at boot (which is why agent.yaml MUST NOT
+//      container's environment at boot (which is why azure.yaml MUST NOT
 //      try to set it — it's a reserved variable).
 //   2. Auto-configures the OpenTelemetry exporter inside the
 //      ``ResponsesHostServer`` runtime, so all FoundryChatClient model

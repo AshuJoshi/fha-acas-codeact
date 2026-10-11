@@ -101,7 +101,7 @@ the exact `az rest` + `az role assignment create` sequence.
 > federate a UAMI to the **Blueprint** MI via Workload Identity
 > Federation. Out of scope for this sample.
 
-### Configuration flow — Bicep → .env → agent.yaml → container
+### Configuration flow: Bicep → .env → azure.yaml → container
 
 ```
 infra/main.bicep outputs              ▼
@@ -112,8 +112,8 @@ infra/main.bicep outputs              ▼
    ACAS_SANDBOX_GROUP                                        │ azd substitutes ${...}
    ACAS_LOCATION                                             ▼
    ACAS_DISK
-                                                  agent/agent.yaml.environment_variables
-                                                  azure.yaml.config.deployments
+                                                  azure.yaml (service).environmentVariables
+                                                  azure.yaml (service).deployments
                                                           │
                                                           │ azd deploy registers
                                                           ▼
@@ -170,7 +170,7 @@ What `azd up` does, in order:
    pair** (two distinct Entra service principals). On subsequent deploys
    of the same agent name, only a new version is registered — the MI
    pair is reused unchanged. The agent's env vars (from
-   [`agent/agent.yaml`](../agent/agent.yaml)) are substituted from
+   the service in [`azure.yaml`](../azure.yaml)) are substituted from
    `.azure/<env>/.env` at this step.
 4. **Runs the postdeploy hook**
    ([`scripts/grant_agent_roles.sh`](../scripts/grant_agent_roles.sh)) —
@@ -444,7 +444,7 @@ If the script itself fails:
 ### After `azd deploy`, the new version's tool calls 403
 
 Unlikely but possible cause: somehow the agent was re-created under a
-new name (e.g. you renamed it in `agent/agent.manifest.yaml`) and the
+new name (e.g. you changed `name:` in `azure.yaml`) and the
 old name's MI no longer has the roles. Re-run the manual grant command
 above against the current name.
 
@@ -458,6 +458,6 @@ lag from the *first* deploy — wait 60s and retry the failing call.
 ### 404 on `/agents/<name>` in postdeploy
 
 The `azd` postdeploy hook is looking up an agent name that doesn't match
-the deployed one. Check that the `name:` field in `agent/agent.yaml`
-matches the service key in `azure.yaml`. The provisioned agent itself is
+the deployed one. Check that the `name:` field of the service in `azure.yaml`
+matches the service key. The provisioned agent itself is
 fine — this is a postdeploy lookup mismatch, not a deployment failure.

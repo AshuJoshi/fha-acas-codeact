@@ -2,7 +2,7 @@
 
 requiredVersions:
     extensions:
-        azure.ai.agents: '>=0.1.0-preview'
+        azure.ai.agents: '>=1.0.0-beta.18'
 name: fha-acas-codeact
 services:
     fha-acas-codeact:
@@ -11,22 +11,56 @@ services:
         language: docker
         docker:
             remoteBuild: true
-        config:
-            container:
-                resources:
-                    cpu: "0.5"
-                    memory: 1Gi
-            deployments:
-                - model:
-                    format: OpenAI
-                    name: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
-                    version: ${AZURE_AI_MODEL_VERSION}
-                  name: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
-                  sku:
-                    # Literal int (extension decodes as JSON int); keep equal to AZURE_AI_MODEL_CAPACITY.
-                    capacity: 30
-                    name: ${AZURE_AI_MODEL_SKU_NAME}
-            startupCommand: python main.py
+        # Agent definition (formerly agent/agent.yaml). The ${...} placeholders are
+        # substituted by azd from the active environment's .env file, which the
+        # Bicep outputs populate (see infra/main.bicep).
+        kind: hosted
+        name: fha-acas-codeact
+        description: |
+            CodeAct hosted agent for FHA. Routes execute_code and run_shell tool
+            calls through the ACAS toolkit into an Azure Container Apps Sandbox.
+        metadata:
+            tags:
+                - Agent Framework
+                - FHA
+                - Responses Protocol
+                - CodeAct
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        # APPLICATIONINSIGHTS_CONNECTION_STRING is platform-reserved: do not set it
+        # here. infra/modules/foundry.bicep links App Insights as a project
+        # connection and the platform injects it at boot.
+        environmentVariables:
+            - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+              value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+            - name: ACAS_SUBSCRIPTION_ID
+              value: ${ACAS_SUBSCRIPTION_ID}
+            - name: ACAS_RESOURCE_GROUP
+              value: ${ACAS_RESOURCE_GROUP}
+            - name: ACAS_SANDBOX_GROUP
+              value: ${ACAS_SANDBOX_GROUP}
+            - name: ACAS_LOCATION
+              value: ${ACAS_LOCATION}
+            - name: ACAS_DISK
+              value: ${ACAS_DISK}
+            - name: ACAS_LEASE_TIMEOUT_S
+              value: "120"
+        deployments:
+            - model:
+                format: OpenAI
+                name: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+                version: ${AZURE_AI_MODEL_VERSION}
+              name: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+              sku:
+                # Literal int (extension decodes as JSON int); keep equal to AZURE_AI_MODEL_CAPACITY.
+                capacity: 30
+                name: ${AZURE_AI_MODEL_SKU_NAME}
+        startupCommand: python main.py
 infra:
     provider: bicep
     path: infra

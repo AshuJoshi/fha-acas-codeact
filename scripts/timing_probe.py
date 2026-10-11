@@ -40,7 +40,7 @@ What it does NOT measure (and why)
 * Foundry-internal phase breakdown (image pull, microVM boot, model
   inference time): those land in Application Insights once
   ``configure_azure_monitor`` is wired (see agent/main.py and
-  agent/agent.yaml). Use ``scripts/query_appinsights.py`` (or the
+  azure.yaml). Use ``scripts/query_appinsights.py`` (or the
   Kusto query in docs/timing.md) to inspect them after a run.
 * Inner ACAS exec timings: the ``execute_code`` tool returns a
   ``duration_ms`` field which the model includes in its reasoning; that

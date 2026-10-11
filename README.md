@@ -149,7 +149,7 @@ uv run python scripts/deploy_comparison_model.py --models all --delete
 
 ### Pointing the agent at the other model
 
-The agent is model-agnostic: [`agent/agent.yaml`](agent/agent.yaml) reads
+The agent is model-agnostic: the agent definition in [`azure.yaml`](azure.yaml) reads
 `${AZURE_AI_MODEL_DEPLOYMENT_NAME}`, which `azd` substitutes from the env at
 deploy time — the model is **not** hard-coded in the YAML. To rerun the same
 FHA against GLM-5.2, override that variable and redeploy the agent:
@@ -408,7 +408,6 @@ telemetry isn't wired — see `infra/modules/foundry.bicep`
 fha-acas-codeact/
 ├── agent/                    # Code that ships inside the FHA container
 │   ├── main.py               # ResponsesHostServer + tool wiring
-│   ├── agent.yaml            # Foundry hosted-agent deployment spec
 │   ├── agent.manifest.yaml   # Foundry agent manifest (template form)
 │   ├── requirements.txt      # Human-readable dep list (source of truth)
 │   ├── requirements.lock     # Flat pinned lock (what pip installs in the image)

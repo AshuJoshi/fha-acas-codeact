@@ -104,7 +104,7 @@ module stack 'resources.bicep' = {
 //
 // The orchestrator script (scripts/orchestrate_codeact.py) reads ACAS_* and
 // FOUNDRY_PROJECT_ENDPOINT. The agent container reads AZURE_AI_* and ACAS_*
-// (via agent.yaml's environment_variables block, which substitutes ${...}
+// (via the environmentVariables block in azure.yaml, which substitutes ${...}
 // against these outputs at `azd deploy` time).
 // -----------------------------------------------------------------------------
 
