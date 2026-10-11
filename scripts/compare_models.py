@@ -35,6 +35,7 @@ import os
 import statistics
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,7 @@ async def _bench_one(
     temperature: float | None = None, reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     """Run one (model, prompt) on a fresh sandbox; never raise — capture failures."""
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     t0 = time.monotonic()
     try:
         with pool.lease(disk=disk) as sbx_id:
@@ -124,6 +126,7 @@ async def _bench_one(
             "tool_calls": [],
             "answer": "",
         }
+    rec["started_at"] = started_at
     return rec
 
 

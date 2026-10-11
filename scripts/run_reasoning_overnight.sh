@@ -126,6 +126,9 @@ run_batches() {
   return 0
 }
 
+uv run --extra compare python scripts/write_run_meta.py start "$OUT_ROOT" -- ${@+"$@"} \
+  || echo "WARNING: could not write run_meta.json" >&2
+
 if [[ "$SNAPSHOT" == "1" ]]; then
   uv run python scripts/deploy_comparison_model.py --snapshot "$OUT_ROOT/deployments.before.json" \
     || echo "WARNING: could not snapshot deployments; the end-of-run check will be skipped" >&2
@@ -186,6 +189,9 @@ if [[ "$SNAPSHOT" == "1" && -f "$OUT_ROOT/deployments.before.json" ]]; then
     echo "WARNING: a deployment changed during the run; see $OUT_ROOT/deployments.check.txt" >&2
   fi
 fi
+
+if (( run_rc != 0 || check_rc != 0 )); then meta_status=failed; else meta_status=ok; fi
+uv run --extra compare python scripts/write_run_meta.py finish "$OUT_ROOT" "$meta_status" || true
 
 if (( run_rc != 0 )); then
   exit 1

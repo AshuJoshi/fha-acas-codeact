@@ -19,6 +19,10 @@ Examples
         benchmark-results/reasoning-repeats \\
         benchmark-results/reasoning-repeats-mai \\
         --json benchmark-results/reasoning-comparison.json
+
+    # Same model in different runs stays a separate row (e.g. then vs now)
+    uv run python scripts/compare_reasoning_runs.py --by-path \\
+        benchmark-results/reasoning-repeats benchmark-results/2026-10-11-oct-battery
 """
 
 from __future__ import annotations
@@ -69,6 +73,17 @@ def _load_records(paths: list[Path]) -> list[dict[str, Any]]:
             skipped += 1
     if skipped:
         print(f"warning: {skipped} file(s) skipped", file=sys.stderr)
+    return records
+
+
+def _load_by_path(paths: list[Path]) -> list[dict[str, Any]]:
+    """Load each path separately and suffix the model with the path name, so the same
+    model in two runs (say August and October) stays two rows instead of one."""
+    records: list[dict[str, Any]] = []
+    for path in paths:
+        for record in _load_records([path]):
+            record["model"] = f"{record.get('model', '?')} @ {path.name}"
+            records.append(record)
     return records
 
 
@@ -166,8 +181,9 @@ def _summarize(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _print_table(summaries: list[dict[str, Any]]) -> None:
+    width = max([25, *(len(item["model"]) for item in summaries)])
     header = (
-        f"{'model':<25} {'ok':>7} {'mean':>7} {'okmean':>7} {'med':>7} {'p95':>7} "
+        f"{'model':<{width}} {'ok':>7} {'mean':>7} {'okmean':>7} {'med':>7} {'p95':>7} "
         f"{'max':>7} {'turns':>7} {'tools':>7} {'tokens':>8} {'retry':>7} {'stable':>8}"
     )
     print(header)
@@ -176,7 +192,7 @@ def _print_table(summaries: list[dict[str, Any]]) -> None:
         ok_mean = item["mean_success_wall_s"]
         ok_mean_text = "n/a" if ok_mean is None else f"{ok_mean:.1f}"
         print(
-            f"{item['model']:<25} "
+            f"{item['model']:<{width}} "
             f"{item['effective_successes']:>3}/{item['runs']:<3} "
             f"{item['mean_wall_s']:>7.1f} {ok_mean_text:>7} "
             f"{item['median_wall_s']:>7.1f} "
@@ -194,9 +210,15 @@ def main() -> int:
     )
     parser.add_argument("paths", nargs="+", type=Path)
     parser.add_argument("--json", type=Path, help="Write summary JSON to this path.")
+    parser.add_argument(
+        "--by-path",
+        action="store_true",
+        help="Keep each path separate: rows become 'model @ folder', so the same model "
+        "in different runs can be compared side by side instead of being merged.",
+    )
     args = parser.parse_args()
 
-    records = _load_records(args.paths)
+    records = _load_by_path(args.paths) if args.by_path else _load_records(args.paths)
     if not records:
         parser.error("No run records found.")
     summaries = _summarize(records)

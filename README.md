@@ -316,6 +316,18 @@ uv run python scripts/compare_reasoning_runs.py benchmark-results/my-run \
     --json benchmark-results/my-run-summary.json
 ```
 
+**One folder per run.** Name it with the date, for example
+`benchmark-results/2026-10-11-oct-battery`. Every run record carries its own
+`started_at` (UTC), and the runner writes `run_meta.json` into the folder with
+the start and end time, git commit, package versions, models, API, reasoning
+effort, pacing, repeats and a hash of the prompts file, plus the
+`deployments.*.json` snapshots. Older folders have none of these fields, so for
+them the folder name and file times are the only date. When you pass several
+folders, rows for the same model are merged; add `--by-path` to keep them apart
+(`kimi-k3 @ reasoning-repeats` next to `kimi-k3 @ 2026-10-11-oct-battery`).
+Add the folder to `docs/benchmark-results-catalog.md`, since `benchmark-results/`
+is gitignored.
+
 Its `ok` column only means a non-empty answer without a known failure marker;
 it is not a factual grade. `stable` counts prompts whose solution path (turns,
 tool sequence, installs, contacted domains) was identical on every repeat.

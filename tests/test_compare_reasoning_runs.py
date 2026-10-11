@@ -5,9 +5,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import compare_reasoning_runs as crr  # noqa: E402
+import write_run_meta  # noqa: E402
 
 
 def _record(model, prompt, *, answer="42", tools=("execute_code",), wall_ms=1000, retries=0):
@@ -74,6 +76,42 @@ class LoadRecordsTests(unittest.TestCase):
         self.assertIn("run_002.json", err.getvalue())
         self.assertIn("run_003.json", err.getvalue())
         self.assertIn("2 file(s) skipped", err.getvalue())
+
+    def test_by_path_keeps_the_same_model_in_two_runs_apart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old, new = Path(tmp) / "aug", Path(tmp) / "oct"
+            for folder, wall in ((old, 1000), (new, 3000)):
+                folder.mkdir()
+                (folder / "run_001.json").write_text(json.dumps(_record("m", "p", wall_ms=wall)))
+
+            merged = crr._summarize(crr._load_records([old, new]))
+            separate = crr._summarize(crr._load_by_path([old, new]))
+
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(sorted(s["model"] for s in separate), ["m @ aug", "m @ oct"])
+        self.assertEqual({s["model"]: s["mean_wall_s"] for s in separate}, {"m @ aug": 1.0, "m @ oct": 3.0})
+
+
+class RunMetaTests(unittest.TestCase):
+    def test_start_records_settings_and_prompt_hash_then_finish_closes_it(self):
+        env = {"MODELS": "a,b", "API": "responses", "EFFORT": "medium", "GAP_S": "3", "PARALLEL": "1"}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            (out / "prompts.txt").write_text("one\ntwo\n")
+            with mock.patch.dict("os.environ", env):
+                write_run_meta.main(["start", str(out), "--", "--temperature", "0"])
+            meta = json.loads((out / "run_meta.json").read_text())
+            self.assertEqual(meta["status"], "running")
+            self.assertEqual(meta["settings"]["reasoning_effort"], "medium")
+            self.assertTrue(meta["settings"]["parallel"])
+            self.assertEqual(meta["settings"]["extra_args"], ["--temperature", "0"])
+            self.assertEqual(meta["prompts"]["count"], 2)
+            self.assertEqual(len(meta["prompts"]["sha256"]), 64)
+
+            write_run_meta.main(["finish", str(out), "ok"])
+            meta = json.loads((out / "run_meta.json").read_text())
+            self.assertEqual(meta["status"], "ok")
+            self.assertIsNotNone(meta["ended_at"])
 
 
 if __name__ == "__main__":
