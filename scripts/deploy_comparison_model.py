@@ -151,6 +151,26 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
         "model_version": "2026-07-09",
         "sku": "GlobalStandard",
     },
+    # GPT-6 generation (catalog GA, eastus2). Subscription quota for GlobalStandard
+    # is 1000 per model, so deploy these well above the fleet's capacity of 30.
+    "gpt-6-astra": {
+        "model_name": "gpt-6-astra",
+        "model_format": "OpenAI",
+        "model_version": "2026-09-03",
+        "sku": "GlobalStandard",
+    },
+    "gpt-6.1-sol": {
+        "model_name": "gpt-6.1-sol",
+        "model_format": "OpenAI",
+        "model_version": "2026-09-29",
+        "sku": "GlobalStandard",
+    },
+    "deepseek-v4.1-flash": {
+        "model_name": "FW-DeepSeek-V4.1-Flash",
+        "model_format": "Fireworks",
+        "model_version": "1",
+        "sku": "DataZoneStandard",
+    },
     # Microsoft's own first-party reasoning model, Preview lifecycle status on
     # this account as of 2026-08-22. Pay-go GlobalStandard SKU (unlike Nemotron,
     # no PTU-only blocker here).
