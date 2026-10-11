@@ -51,7 +51,6 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from dotenv import load_dotenv
-import httpx
 
 
 def _load_azd_env() -> None:
@@ -86,7 +85,7 @@ from agent_framework import Agent, ChatMiddleware, tool  # noqa: E402
 from agent_framework.foundry import FoundryChatClient  # noqa: E402
 from agent_framework.openai import OpenAIChatCompletionClient  # noqa: E402
 from azure.identity import AzureCliCredential, get_bearer_token_provider  # noqa: E402
-from openai import AsyncAzureOpenAI, AsyncOpenAI  # noqa: E402
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient  # noqa: E402
 from pydantic import Field  # noqa: E402
 
 from acas_toolkit import SandboxPool  # noqa: E402
@@ -126,7 +125,6 @@ DEFAULT_DISK = "python-3.13"
 #   responses -> Responses API (FoundryChatClient). Matches the deployed FHA, but
 #                Fireworks models report zero tokens on this path.
 DEFAULT_API = "chat"
-CHAT_API_VERSION = "2024-10-21"
 COGNITIVE_SCOPE = "https://cognitiveservices.azure.com/.default"
 FOUNDRY_SCOPE = "https://ai.azure.com/.default"
 # The openai SDK already retries 429/5xx internally with exponential backoff
@@ -190,10 +188,10 @@ class _RetryTracker:
         self._events: list[tuple[str, float, int | None]] = []
         self.cache_headers: list[dict[str, str]] = []
 
-    async def on_request(self, request: httpx.Request) -> None:
+    async def on_request(self, request: Any) -> None:
         self._events.append(("request", time.monotonic(), None))
 
-    async def on_response(self, response: httpx.Response) -> None:
+    async def on_response(self, response: Any) -> None:
         self._events.append(("response", time.monotonic(), response.status_code))
         cache_headers = {
             name: value
@@ -314,7 +312,7 @@ async def _run_agent(
 
     timer = _ModelCallTimer()
     retry_tracker = _RetryTracker()
-    raw_client: AsyncAzureOpenAI | AsyncOpenAI | None = None
+    raw_client: AsyncOpenAI | None = None
     if api == "chat":
         openai_base_url = os.environ.get("FOUNDRY_OPENAI_BASE_URL")
         account = os.environ.get("FOUNDRY_ACCOUNT_NAME")
@@ -324,7 +322,7 @@ async def _run_agent(
                 "--api chat (auto-loaded from the azd env). Use --api responses "
                 "to fall back to the FHA path."
             )
-        http_client = httpx.AsyncClient(
+        http_client = DefaultAsyncHttpxClient(
             event_hooks={"request": [retry_tracker.on_request], "response": [retry_tracker.on_response]}
         )
         default_headers = (
@@ -333,30 +331,21 @@ async def _run_agent(
             else None
         )
         if openai_base_url:
-            sync_token_provider = get_bearer_token_provider(
-                AzureCliCredential(), FOUNDRY_SCOPE
-            )
-
-            async def token_provider() -> str:
-                return sync_token_provider()
-
-            raw_client = AsyncOpenAI(
-                base_url=openai_base_url,
-                api_key=token_provider,
-                max_retries=MAX_RETRIES,
-                http_client=http_client,
-                default_headers=default_headers,
-            )
+            base_url, scope = openai_base_url, FOUNDRY_SCOPE
         else:
-            token_provider = get_bearer_token_provider(AzureCliCredential(), COGNITIVE_SCOPE)
-            raw_client = AsyncAzureOpenAI(
-                azure_endpoint=f"https://{account}.openai.azure.com/",
-                azure_ad_token_provider=token_provider,
-                api_version=CHAT_API_VERSION,
-                max_retries=MAX_RETRIES,
-                http_client=http_client,
-                default_headers=default_headers,
-            )
+            base_url, scope = f"https://{account}.openai.azure.com/openai/v1/", COGNITIVE_SCOPE
+        sync_token_provider = get_bearer_token_provider(AzureCliCredential(), scope)
+
+        async def token_provider() -> str:
+            return sync_token_provider()
+
+        raw_client = AsyncOpenAI(
+            base_url=base_url,
+            api_key=token_provider,
+            max_retries=MAX_RETRIES,
+            http_client=http_client,
+            default_headers=default_headers,
+        )
         client: Any = OpenAIChatCompletionClient(model=model, async_client=raw_client)
     else:
         client = FoundryChatClient(

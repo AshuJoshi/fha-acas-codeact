@@ -12,12 +12,14 @@
 # `from agent_framework import tool`, satisfied by agent-framework-core here.
 # The container installs from requirements.lock with --no-deps.
 acas-toolkit @ https://github.com/AshuJoshi/acas-toolkit/archive/0e98022ed2933f242800c45413b7ce3e558619c4.zip
-agent-framework-core==1.19.0
-agent-framework-foundry==1.13.1
+agent-framework-core==1.21.0
+agent-framework-foundry==1.14.1
 # Hosting and the agentserver pair are exact pins: core and responses must be a
 # matched pair or default (store=true) requests return 500.
-agent-framework-foundry-hosting==1.0.0b260918
+agent-framework-foundry-hosting==1.0.0b261008
 azure-ai-agentserver-core==2.2.0
 azure-ai-agentserver-responses==2.2.0
 azure-containerapps-sandbox>=0.1.0b4,<0.2
 python-dotenv>=1.0
+# Held below 7 so the host lock (agent-framework umbrella pulls mem0ai, protobuf<7) can match this lock.
+protobuf<7
