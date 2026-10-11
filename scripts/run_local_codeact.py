@@ -125,6 +125,8 @@ DEFAULT_DISK = "python-3.13"
 #   responses -> Responses API (FoundryChatClient). Matches the deployed FHA, but
 #                Fireworks models report zero tokens on this path.
 DEFAULT_API = "chat"
+# "max" is left out: the Foundry project Responses endpoint rejects it (HTTP 400) even for models that accept it elsewhere.
+REASONING_EFFORTS = ["none", "low", "medium", "high", "xhigh"]
 COGNITIVE_SCOPE = "https://cognitiveservices.azure.com/.default"
 FOUNDRY_SCOPE = "https://ai.azure.com/.default"
 # The openai SDK already retries 429/5xx internally with exponential backoff
@@ -236,6 +238,7 @@ async def _run_agent(
     project_endpoint: str,
     api: str = DEFAULT_API,
     temperature: float | None = None,
+    reasoning_effort: str | None = None,
     session_affinity: str | None = None,
 ) -> dict[str, Any]:
     """LOCAL AGENT: build the agent bound to ``sandbox_id`` and run ``prompt``.
@@ -245,7 +248,8 @@ async def _run_agent(
     call surface: ``chat`` (Chat Completions, token usage for all models) or
     ``responses`` (Responses API, matches the FHA). ``temperature``, when left
     as ``None`` (the default), is never sent, so the provider's own default
-    applies as-is; pass a value to pin it explicitly.
+    applies as-is; pass a value to pin it explicitly. ``reasoning_effort`` works
+    the same way and is sent as ``reasoning.effort`` (Responses API only).
     """
     inner_execute = make_execute_code_tool(pool, sandbox_id)
     inner_shell = make_run_shell_tool(pool, sandbox_id)
@@ -353,13 +357,18 @@ async def _run_agent(
             model=model,
             credential=AzureCliCredential(),
         )
+    agent_options: dict[str, Any] = {}
+    if temperature is not None:
+        agent_options["temperature"] = temperature
+    if reasoning_effort is not None:
+        agent_options["reasoning"] = {"effort": reasoning_effort}
     agent = Agent(
         client=client,
         name="LocalCodeActAgent",
         instructions=INSTRUCTIONS,
         tools=[execute_code, run_shell],
         middleware=[timer],
-        default_options=({"temperature": temperature} if temperature is not None else None),
+        default_options=agent_options or None,
     )
 
     print(f"[local] model={model} sandbox={sandbox_id} api={api}", file=sys.stderr)
@@ -420,6 +429,7 @@ async def _run_agent(
         "model": model,
         "api": api,
         "temperature": temperature,
+        "reasoning_effort": reasoning_effort,
         "session_affinity": session_affinity,
         "sandbox_id": sandbox_id,
         "prompt": prompt,
@@ -533,6 +543,7 @@ async def run_once(args: argparse.Namespace) -> int:
                 project_endpoint=project_endpoint,
                 api=args.api,
                 temperature=args.temperature,
+                reasoning_effort=args.reasoning_effort,
                 session_affinity=args.session_affinity,
             )
         else:
@@ -548,6 +559,7 @@ async def run_once(args: argparse.Namespace) -> int:
                     project_endpoint=project_endpoint,
                     api=args.api,
                     temperature=args.temperature,
+                    reasoning_effort=args.reasoning_effort,
                     session_affinity=args.session_affinity,
                 )
                 rec["sandbox_lease_ms"] = round(lease_ms, 1)
@@ -586,6 +598,13 @@ def main() -> int:
         help="Pin the model's sampling temperature. Default: unset (provider default applies).",
     )
     p.add_argument(
+        "--reasoning-effort",
+        choices=REASONING_EFFORTS,
+        default=None,
+        help="Pin reasoning.effort (requires --api responses). Default: unset (every "
+        "current lineup model defaults to medium). Support varies by model.",
+    )
+    p.add_argument(
         "--session-affinity",
         help="Stable x-session-affinity value for Fireworks prompt-cache routing.",
     )
@@ -593,6 +612,8 @@ def main() -> int:
     p.add_argument("--keep-sandbox", action="store_true", help="Do not delete a leased sandbox after the run.")
     p.add_argument("--json", help="Write the structured run record to this path.")
     args = p.parse_args()
+    if args.reasoning_effort and args.api != "responses":
+        p.error("--reasoning-effort requires --api responses")
     return asyncio.run(run_once(args))
 
 

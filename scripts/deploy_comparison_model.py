@@ -50,8 +50,19 @@ Examples
     uv run python scripts/deploy_comparison_model.py \\
         --deployment-name qwen3 --model-name FW-Qwen3.6-35B-A3B
 
-    # List current deployments on the account.
+    # Per-model capacity in one call (a bare key uses --capacity).
+    uv run python scripts/deploy_comparison_model.py \\
+        --models gpt-6-astra=200,glm-5.3=100,kimi-k3=100
+
+    # List deployments with request/token limits and subscription quota headroom.
     uv run python scripts/deploy_comparison_model.py --list
+
+    # Save the deployment state before a long run, then confirm nothing changed.
+    uv run python scripts/deploy_comparison_model.py --snapshot before.json
+    uv run python scripts/deploy_comparison_model.py --check before.json
+
+    # One tiny tool-using prompt per model (needs `uv sync --extra compare`).
+    uv run python scripts/deploy_comparison_model.py --smoke --models glm-5.3,gpt-6-astra
 
     # Tear down the whole comparison set (does not touch gpt-5.4).
     uv run python scripts/deploy_comparison_model.py --models all --delete
@@ -62,8 +73,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -218,23 +232,161 @@ def _az(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _list_deployments(account: str, resource_group: str) -> int:
+def _deployments_json(account: str, resource_group: str) -> list[dict]:
     proc = _az(
         [
             "cognitiveservices", "account", "deployment", "list",
-            "-n", account, "-g", resource_group,
-            "--query",
-            "[].{name:name, format:properties.model.format, "
-            "model:properties.model.name, version:properties.model.version, "
-            "sku:sku.name, capacity:sku.capacity, "
-            "state:properties.provisioningState}",
-            "-o", "table",
+            "-n", account, "-g", resource_group, "-o", "json",
         ]
     )
-    sys.stdout.write(proc.stdout)
     if proc.returncode != 0:
-        sys.stderr.write(proc.stderr)
-    return proc.returncode
+        sys.exit(proc.stderr)
+    return json.loads(proc.stdout)
+
+
+def _quota_rows(account: str, resource_group: str) -> dict[str, tuple[float, float]]:
+    """Subscription quota rows for the account's region: name -> (used, limit)."""
+    loc = _az(
+        ["cognitiveservices", "account", "show", "-n", account, "-g", resource_group,
+         "--query", "location", "-o", "tsv"]
+    ).stdout.strip()
+    proc = _az(["cognitiveservices", "usage", "list", "-l", loc, "-o", "json"])
+    if not loc or proc.returncode != 0:
+        return {}
+    return {
+        r["name"]["value"].lower(): (r["currentValue"], r["limit"])
+        for r in json.loads(proc.stdout)
+    }
+
+
+def _quota_for(rows: dict[str, tuple[float, float]], dep: dict) -> str:
+    # Quota rows are keyed <Family>.<Sku>.<model> and drop the FW- prefix; not every model has one.
+    sku = dep["sku"]["name"]
+    model = dep["properties"]["model"]["name"]
+    base = model[3:] if model.startswith("FW-") else model
+    suffix = f".{sku}.{base}".lower()
+    for key, (used, limit) in rows.items():
+        if key.endswith(suffix):
+            return f"{used:g}/{limit:g}"
+    return "-"
+
+
+def _rate_limit(dep: dict, key: str) -> str:
+    for rl in dep["properties"].get("rateLimits") or []:
+        if rl.get("key") == key:
+            return f"{rl.get('count'):g}"
+    return "-"
+
+
+def _list_deployments(account: str, resource_group: str) -> int:
+    deps = _deployments_json(account, resource_group)
+    quota = _quota_rows(account, resource_group)
+    header = ["name", "model", "version", "sku", "cap", "state", "req/min", "tok/min", "quota used/limit"]
+    rows = [
+        [
+            d["name"],
+            d["properties"]["model"]["name"],
+            d["properties"]["model"]["version"],
+            d["sku"]["name"],
+            str(d["sku"]["capacity"]),
+            d["properties"]["provisioningState"],
+            _rate_limit(d, "request"),
+            _rate_limit(d, "token"),
+            _quota_for(quota, d),
+        ]
+        for d in sorted(deps, key=lambda x: x["name"])
+    ]
+    widths = [max(len(r[i]) for r in [header, *rows]) for i in range(len(header))]
+    for r in [header, *rows]:
+        print("  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip())
+    print("(quota is subscription-wide, so 'used' can exceed this account's share)")
+    return 0
+
+
+def _snapshot(account: str, resource_group: str, path: str) -> int:
+    deps = _deployments_json(account, resource_group)
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            {
+                "taken_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "account": account,
+                "resource_group": resource_group,
+                "deployments": deps,
+            },
+            indent=2,
+        )
+    )
+    print(f"[deploy-model] saved {len(deps)} deployments to {out}", file=sys.stderr)
+    return 0
+
+
+def _identity(dep: dict) -> tuple[str, str, str, str, str]:
+    """What must not change under a benchmark: the model, its version, SKU and state."""
+    m = dep["properties"]["model"]
+    return (m["name"], m["version"], m["format"], dep["sku"]["name"], dep["properties"]["provisioningState"])
+
+
+def _check(account: str, resource_group: str, path: str, only: set[str] | None) -> int:
+    """Compare live deployments to a saved snapshot; exit 1 if a model, version, SKU or state changed."""
+    saved = {d["name"]: d for d in json.loads(Path(path).read_text())["deployments"]}
+    now = {d["name"]: d for d in _deployments_json(account, resource_group)}
+    problems: list[str] = []
+    notes: list[str] = []
+    for name, old in saved.items():
+        if only and name not in only:
+            continue
+        cur = now.get(name)
+        if cur is None:
+            problems.append(f"{name}: deployment is gone")
+            continue
+        if _identity(old) != _identity(cur):
+            problems.append(f"{name}: {_identity(old)} -> {_identity(cur)}")
+            continue
+        if old["sku"]["capacity"] != cur["sku"]["capacity"]:
+            notes.append(f"{name}: capacity {old['sku']['capacity']} -> {cur['sku']['capacity']}")
+        if (old.get("systemData") or {}).get("lastModifiedAt") != (cur.get("systemData") or {}).get("lastModifiedAt"):
+            notes.append(f"{name}: modified since the snapshot (model, version, SKU and state unchanged)")
+    for name in sorted(set(now) - set(saved)):
+        if not only or name in only:
+            notes.append(f"{name}: not in the snapshot")
+    for line in problems:
+        print(f"CHANGED  {line}")
+    for line in notes:
+        print(f"note     {line}")
+    print("OK: no model, version, SKU or state changes" if not problems else f"FAIL: {len(problems)} deployment(s) changed")
+    return 1 if problems else 0
+
+
+SMOKE_PROMPT = (
+    "Use execute_code to compute the sum of squares from 1 to 100. Reply with the integer only."
+)
+
+
+def _smoke(targets: list[dict[str, str]], apis: list[str]) -> int:
+    """Run one tool-using prompt per model and API through run_local_codeact; PASS if the answer is right."""
+    runner = Path(__file__).resolve().parent / "run_local_codeact.py"
+    failures = 0
+    for spec in targets:
+        for api in apis:
+            t0 = time.monotonic()
+            try:
+                proc = subprocess.run(
+                    [sys.executable, str(runner), SMOKE_PROMPT, "--api", api,
+                     "--model", spec["deployment_name"]],
+                    capture_output=True, text=True, timeout=300,
+                )
+                out = proc.stdout + proc.stderr
+                ok = proc.returncode == 0 and re.search(r"338,?350", out) is not None
+                why = "" if ok else (
+                    next((ln.strip() for ln in out.splitlines() if re.search(r"Error|Unsupported|400|404|429", ln)), "no expected answer")
+                )
+            except subprocess.TimeoutExpired:
+                ok, why = False, "timed out after 300s"
+            failures += 0 if ok else 1
+            print(f"{'PASS' if ok else 'FAIL'}  {spec['deployment_name']:22} {api:10} {time.monotonic() - t0:5.1f}s  {why[:140]}")
+    return 1 if failures else 0
 
 
 def _deploy_one(
@@ -291,24 +443,28 @@ def _resolve_targets(args: argparse.Namespace) -> list[dict[str, str]]:
     """Build the list of model specs to operate on.
 
     ``--models`` (comma-separated registry keys, or ``all``) takes precedence;
-    otherwise fall back to the single ad-hoc model from the individual flags.
+    a key may carry its own capacity as ``key=N``. Otherwise fall back to the
+    single ad-hoc model from the individual flags.
     """
     if args.models:
         raw = args.models.strip()
-        keys = (
+        tokens = (
             list(COMPARISON_MODELS)
             if raw.lower() == "all"
             else [k.strip() for k in raw.split(",") if k.strip()]
         )
         targets: list[dict[str, str]] = []
-        for key in keys:
+        for token in tokens:
+            key, _, cap = token.partition("=")
             spec = COMPARISON_MODELS.get(key)
             if spec is None:
                 sys.exit(
                     f"Unknown model key '{key}'. Known: "
                     f"{', '.join(COMPARISON_MODELS)} (or 'all')."
                 )
-            targets.append({"deployment_name": key, **spec})
+            if cap and not cap.isdigit():
+                sys.exit(f"Capacity for '{key}' must be an integer, got '{cap}'.")
+            targets.append({"deployment_name": key, **spec, **({"capacity": cap} if cap else {})})
         return targets
     return [
         {
@@ -335,6 +491,7 @@ def main() -> int:
     p.add_argument(
         "--models",
         help="Comma-separated registry keys to deploy/delete as a set, or 'all'. "
+        "A key can set its own capacity as key=N (e.g. glm-5.3=100). "
         f"Known: {', '.join(COMPARISON_MODELS)}. Overrides the single-model flags.",
     )
     p.add_argument(
@@ -372,7 +529,30 @@ def main() -> int:
     p.add_argument(
         "--list",
         action="store_true",
-        help="List current deployments on the account and exit.",
+        help="List deployments with request/token limits and quota headroom, then exit.",
+    )
+    p.add_argument(
+        "--snapshot",
+        metavar="FILE",
+        help="Save the full state of every deployment to FILE (JSON), then exit.",
+    )
+    p.add_argument(
+        "--check",
+        metavar="FILE",
+        help="Compare live deployments to a --snapshot FILE and exit 1 if a model, "
+        "version, SKU or state changed. Limited to --models when given.",
+    )
+    p.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run one tool-using prompt per --models entry through run_local_codeact "
+        "and report PASS/FAIL. Needs `uv sync --extra compare`.",
+    )
+    p.add_argument(
+        "--smoke-api",
+        choices=["chat", "responses", "both"],
+        default="responses",
+        help="API surface(s) for --smoke (default: responses).",
     )
     args = p.parse_args()
 
@@ -381,6 +561,16 @@ def main() -> int:
 
     if args.list:
         return _list_deployments(account, resource_group)
+    if args.snapshot:
+        return _snapshot(account, resource_group, args.snapshot)
+    if args.check:
+        only = {t["deployment_name"] for t in _resolve_targets(args)} if args.models else None
+        return _check(account, resource_group, args.check, only)
+    if args.smoke:
+        if not args.models:
+            sys.exit("--smoke needs --models (registry keys or 'all').")
+        apis = ["chat", "responses"] if args.smoke_api == "both" else [args.smoke_api]
+        return _smoke(_resolve_targets(args), apis)
 
     targets = _resolve_targets(args)
     rc = 0
@@ -389,7 +579,8 @@ def main() -> int:
             rc = _delete_one(account, resource_group, spec["deployment_name"]) or rc
     else:
         for spec in targets:
-            rc = _deploy_one(account, resource_group, spec, args.capacity) or rc
+            capacity = int(spec.get("capacity", args.capacity))
+            rc = _deploy_one(account, resource_group, spec, capacity) or rc
 
     _list_deployments(account, resource_group)
     return rc

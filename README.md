@@ -128,6 +128,19 @@ uv run python scripts/deploy_comparison_model.py --models kimi-k3 --capacity 10
 # List deployments on the account
 uv run python scripts/deploy_comparison_model.py --list
 
+# Set capacity per model in one call (a bare key uses --capacity)
+uv run python scripts/deploy_comparison_model.py \
+    --models gpt-6-astra=200,glm-5.3=100,kimi-k3=100
+
+# --list also shows request/token limits and subscription quota headroom.
+# Save deployment state before a long benchmark and confirm it did not change
+# (--check exits 1 if a model, version, SKU or state differs)
+uv run python scripts/deploy_comparison_model.py --snapshot before.json
+uv run python scripts/deploy_comparison_model.py --check before.json
+
+# One tool-using prompt per model; PASS means the answer was right
+uv run python scripts/deploy_comparison_model.py --smoke --models glm-5.3,gpt-6-astra
+
 # Deploy a different Fireworks model under a custom deployment name (ad-hoc)
 uv run python scripts/deploy_comparison_model.py \
     --deployment-name qwen3 --model-name FW-Qwen3.6-35B-A3B
@@ -236,6 +249,14 @@ aggregate `all_records.json`) under `--out-dir`. That folder defaults to
 > `ResponsesHostServer`). The two paths can also differ in latency, so keep
 > `--api` fixed within a single comparison.
 
+> **Reasoning effort (`--reasoning-effort`).** Left unset, each model uses its
+> provider default (`medium` for every current lineup model). Pin it with
+> `--reasoning-effort low|medium|high` (also `none` and `xhigh` where a model
+> accepts them); it needs `--api responses`, is recorded in each run, and a
+> model that does not accept the value fails its runs with an HTTP 400. Models
+> differ: GPT-6 and GPT-5.6 take `xhigh`, only `gpt-5.6-terra` takes `none`, and
+> the Fireworks models take `low`, `medium` and `high`.
+
 > **Model cold-starts.** The *first* inference on a freshly-deployed or idle
 > model endpoint can be far slower than steady state (we've seen a first call
 > take ~52s vs ~3s warm). This is a **provider-side model cold-start, not the
@@ -258,6 +279,19 @@ prompt suite into batches and runs each through `compare_models.py` into its own
 a folder). It refuses to reuse a folder that already has results, and exits
 non-zero if any batch crashed.
 
+Settings are environment variables: `API` (`chat` or `responses`, default
+`chat`), `GAP_S` (seconds between runs, default 20), `EFFORT` (reasoning effort,
+needs `API=responses`), `REPEATS`, `BATCH_SIZE`, `PROMPTS`. With `PARALLEL=1` and
+`MODELS=a,b,c` it runs one process per model at the same time into
+`OUT_DIR/<model>/batchN`, so every model sees the same time window and the run
+takes about as long as the slowest model; use a short `GAP_S` (3 to 5), since
+rate limits are per deployment. It also saves the deployment state before and
+after (`deployments.*.json`) and reports any model, version, SKU or state change.
+
+The GPT-5.6 and GPT-6 models reject function tools on Chat Completions, and
+`gpt-oss-120b` supports only Chat Completions, so a battery that includes the
+former uses `API=responses` and `gpt-oss-120b` needs its own `API=chat` run.
+
 ```bash
 # Full reasoning suite, all DEFAULT_MODELS, 5 repeats, batches of 5 prompts
 mkdir -p benchmark-results/my-run
@@ -265,9 +299,14 @@ nohup caffeinate -i scripts/run_reasoning_overnight.sh benchmark-results/my-run 
     > benchmark-results/my-run/overnight.log 2>&1 &
 disown
 
+# Parallel, Responses API, effort pinned to medium
+mkdir -p benchmark-results/my-parallel-run
+PARALLEL=1 MODELS=glm-5.3,kimi-k3,gpt-6-astra API=responses EFFORT=medium GAP_S=3 \
+    scripts/run_reasoning_overnight.sh benchmark-results/my-parallel-run
+
 # Other suite or settings; extra args pass through to compare_models.py
-PROMPTS=prompts/volatile.txt REPEATS=3 \
-    scripts/run_reasoning_overnight.sh benchmark-results/volatile-run --models gpt-5.4,glm-5.2
+API=responses PROMPTS=prompts/volatile.txt REPEATS=3 \
+    scripts/run_reasoning_overnight.sh benchmark-results/volatile-run --models gpt-5.6-terra,glm-5.3
 ```
 
 Summarize any mix of result folders (recurses into `batchN/`):
@@ -287,7 +326,7 @@ Fireworks prompt caching is enabled by default. For serverless or multi-replica
 deployments, a stable routing hint improves the chance that related requests
 reach the replica holding their shared prompt prefix. The focused benchmark
 compares no routing hint against a stable `x-session-affinity` header for Kimi
-K3, MiniMax M3, DeepSeek V4 Pro, and GLM-5.2:
+K3, MiniMax M3, and GLM-5.3:
 
 ```bash
 uv run --extra compare python scripts/prompt_cache_benchmark.py

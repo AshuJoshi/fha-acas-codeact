@@ -73,7 +73,7 @@ DEFAULT_PROMPTS = [
 
 async def _bench_one(
     *, pool: SandboxPool, model: str, prompt: str, disk: str, project_endpoint: str, api: str,
-    temperature: float | None = None,
+    temperature: float | None = None, reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     """Run one (model, prompt) on a fresh sandbox; never raise — capture failures."""
     t0 = time.monotonic()
@@ -87,6 +87,7 @@ async def _bench_one(
                 project_endpoint=project_endpoint,
                 api=api,
                 temperature=temperature,
+                reasoning_effort=reasoning_effort,
             )
         rec["success"] = bool((rec.get("answer") or "").strip())
         rec["error"] = None
@@ -94,6 +95,7 @@ async def _bench_one(
         rec = {
             "model": model,
             "api": api,
+            "reasoning_effort": reasoning_effort,
             "prompt": prompt,
             "success": False,
             "error": f"{type(ex).__name__}: {ex}",
@@ -223,6 +225,7 @@ async def run(args: argparse.Namespace) -> int:
                     project_endpoint=project_endpoint,
                     api=args.api,
                     temperature=args.temperature,
+                    reasoning_effort=args.reasoning_effort,
                 )
                 cold_start[model] = warm.get("total_wall_ms", 0.0)
                 print(
@@ -247,6 +250,7 @@ async def run(args: argparse.Namespace) -> int:
                         project_endpoint=project_endpoint,
                         api=args.api,
                         temperature=args.temperature,
+                        reasoning_effort=args.reasoning_effort,
                     )
                     rec["repeat"] = rep + 1
                     records.append(rec)
@@ -293,7 +297,17 @@ def main() -> int:
         help="Pin the model's sampling temperature for every call in this battery. "
         "Default: unset (provider default applies, unpinned).",
     )
+    p.add_argument(
+        "--reasoning-effort",
+        choices=local.REASONING_EFFORTS,
+        default=None,
+        help="Pin reasoning.effort for every call (requires --api responses). "
+        "Default: unset (current lineup models all default to medium). Models differ "
+        "in the levels they accept; a model that rejects the value fails its runs.",
+    )
     args = p.parse_args()
+    if args.reasoning_effort and args.api != "responses":
+        p.error("--reasoning-effort requires --api responses")
     return asyncio.run(run(args))
 
 
