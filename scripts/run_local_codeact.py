@@ -31,7 +31,7 @@ Examples
 
     # Compare a model, keep the sandbox, and write structured metrics to JSON
     uv run --extra compare python scripts/run_local_codeact.py \\
-        "sort this list and dedupe: [3,1,2,3,1]" --model glm-5.2 --json /tmp/run.json
+        "sort this list and dedupe: [3,1,2,3,1]" --model glm-5.3 --json /tmp/run.json
 
     # Reuse a sandbox you already have
     uv run --extra compare python scripts/run_local_codeact.py "show os release" \\

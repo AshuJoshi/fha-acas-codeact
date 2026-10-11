@@ -22,7 +22,7 @@ Examples
 
     # Three repeats, 5s pacing, custom models, custom prompts file (one per line)
     uv run --extra compare python scripts/compare_models.py \\
-        --models gpt-5.4,glm-5.2,kimi-k2.7-code --repeats 3 --gap-s 5 \\
+        --models gpt-5.4,glm-5.3,kimi-k3 --repeats 3 --gap-s 5 \\
         --prompts prompts.txt --out-dir benchmark-results
 """
 
@@ -48,12 +48,9 @@ DEFAULT_MODELS = [
     "gpt-5.4",
     "gpt-5.5",
     "gpt-5.6-terra",
-    "glm-5.2",
-    "kimi-k2.7-code",
+    "glm-5.3",
     "kimi-k3",
-    "deepseek-v4-pro",
     "gpt-oss-120b",
-    "minimax-m2.5",
     "minimax-m3",
     "mai-thinking-1",
     # nemotron-3-super-120b intentionally NOT added yet: the exact catalog

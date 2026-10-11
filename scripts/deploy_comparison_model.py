@@ -6,11 +6,11 @@ lean and Microsoft-only; use this script on demand to add a second model to
 the *existing* Foundry account so you can compare it against the default
 ``gpt-5.4`` (e.g. for coding quality).
 
-Defaults deploy **Fireworks GLM-5.2** (catalog name ``FW-GLM-5.2``). A small
+Defaults deploy **Fireworks GLM-5.3** (catalog name ``FW-GLM-5.3``). A small
 registry of known comparison models (``COMPARISON_MODELS``) lets you deploy or
-tear down several at once with ``--models`` (e.g. GLM-5.2 + Kimi-K2.7-Code).
+tear down several at once with ``--models`` (e.g. GLM-5.3 + Kimi-K3).
 
-    ⚠️  GLM-5.2 / Kimi via Fireworks are **Non-Microsoft (partner MaaS)
+    ⚠️  GLM-5.3 / Kimi via Fireworks are **Non-Microsoft (partner MaaS)
         models**. When you use them, data is shared with Fireworks AI and sent
         outside Microsoft systems, and different compliance/data-handling rules
         apply. See the model card / https://trust.fireworks.ai/ before
@@ -34,17 +34,17 @@ these via rbac.bicep's Cognitive Services Contributor grant).
 
 Examples
 --------
-    # Deploy GLM-5.2 with defaults (capacity 1 ≈ 1000 tokens/min — low).
+    # Deploy GLM-5.3 with defaults (capacity 1, about 1000 tokens/min, which is low).
     uv run python scripts/deploy_comparison_model.py
 
     # Bump throughput for real agent runs (subject to your quota).
     uv run python scripts/deploy_comparison_model.py --capacity 10
 
-    # Deploy the whole comparison set (GLM-5.2 + Kimi-K2.7-Code) at capacity 10.
+    # Deploy the whole comparison set at capacity 10.
     uv run python scripts/deploy_comparison_model.py --models all --capacity 10
 
     # Deploy just Kimi from the registry.
-    uv run python scripts/deploy_comparison_model.py --models kimi-k2.7-code --capacity 10
+    uv run python scripts/deploy_comparison_model.py --models kimi-k3 --capacity 10
 
     # Deploy a different Fireworks model under a custom deployment name (ad-hoc).
     uv run python scripts/deploy_comparison_model.py \\
@@ -108,14 +108,8 @@ _load_azd_env()
 # deployment name you'll pass to the benchmark (`--model <key>`); the value is
 # the catalog spec. Add entries here to grow the comparison set.
 COMPARISON_MODELS: dict[str, dict[str, str]] = {
-    "glm-5.2": {
-        "model_name": "FW-GLM-5.2",
-        "model_format": "Fireworks",
-        "model_version": "1",
-        "sku": "DataZoneStandard",
-    },
-    "kimi-k2.7-code": {
-        "model_name": "FW-Kimi-K2.7-Code",
+    "glm-5.3": {
+        "model_name": "FW-GLM-5.3",
         "model_format": "Fireworks",
         "model_version": "1",
         "sku": "DataZoneStandard",
@@ -124,12 +118,6 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
     # (no provisioned SKUs yet) -- expected for a freshly-launched model.
     "kimi-k3": {
         "model_name": "FW-Kimi-K3",
-        "model_format": "Fireworks",
-        "model_version": "1",
-        "sku": "DataZoneStandard",
-    },
-    "deepseek-v4-pro": {
-        "model_name": "FW-DeepSeek-V4-Pro",
         "model_format": "Fireworks",
         "model_version": "1",
         "sku": "DataZoneStandard",
@@ -144,12 +132,6 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
     "gpt-oss-120b": {
         "model_name": "gpt-oss-120b",
         "model_format": "OpenAI-OSS",
-        "model_version": "1",
-        "sku": "DataZoneStandard",
-    },
-    "minimax-m2.5": {
-        "model_name": "FW-MiniMax-M2.5",
-        "model_format": "Fireworks",
         "model_version": "1",
         "sku": "DataZoneStandard",
     },
@@ -178,8 +160,7 @@ COMPARISON_MODELS: dict[str, dict[str, str]] = {
         "model_version": "2026-06-01",
         "sku": "GlobalStandard",
     },
-    # M3 supersedes minimax-m2.5; kept alongside it (not replacing it) so the
-    # reasoning.txt battery can show a real before/after on the same vendor.
+    # M3 replaced minimax-m2.5 (that deployment was removed on 2026-10-10).
     "minimax-m3": {
         "model_name": "FW-MiniMax-M3",
         "model_format": "Fireworks",
@@ -327,8 +308,8 @@ def main() -> int:
     )
     p.add_argument(
         "--deployment-name",
-        default="glm-5.2",
-        help="Name of the deployment to create/delete (default: glm-5.2). "
+        default="glm-5.3",
+        help="Name of the deployment to create/delete (default: glm-5.3). "
         "Ignored when --models is given.",
     )
     p.add_argument(
@@ -338,8 +319,8 @@ def main() -> int:
     )
     p.add_argument(
         "--model-name",
-        default="FW-GLM-5.2",
-        help="Catalog model name (default: FW-GLM-5.2).",
+        default="FW-GLM-5.3",
+        help="Catalog model name (default: FW-GLM-5.3).",
     )
     p.add_argument(
         "--model-format",

@@ -35,7 +35,7 @@ import run_local_codeact as local  # noqa: E402
 from acas_toolkit import SandboxPool  # noqa: E402
 
 
-DEFAULT_MODELS = ("kimi-k3", "minimax-m3", "deepseek-v4-pro", "glm-5.2")
+DEFAULT_MODELS = ("kimi-k3", "minimax-m3", "glm-5.3")
 PRIME_TASK = "Run Python to print the integer result of 17 * 19."
 MEASURED_TASKS = (
     "Run Python to compute the sum of squares from 1 through 500 and print the integer.",

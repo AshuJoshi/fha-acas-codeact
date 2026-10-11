@@ -102,11 +102,11 @@ uv run python scripts/orchestrate_codeact.py "install requests" \
 ## Comparison models (optional)
 
 The default deploy stands up a single model (`gpt-5.4`). To A/B other models
-against it — e.g. **Fireworks GLM-5.2** and **Fireworks Kimi-K2.7-Code**, both
-tuned for coding — use the standalone helper. It is intentionally **not** part
+against it, e.g. **Fireworks GLM-5.3** and **Fireworks Kimi-K3**, both
+tuned for coding, use the standalone helper. It is intentionally **not** part
 of `azd up`, so the primary deploy stays lean and Microsoft-only.
 
-> ⚠️ **The Fireworks models (GLM-5.2, Kimi-K2.7-Code) are Non-Microsoft
+> ⚠️ **The Fireworks models (GLM-5.3, Kimi-K3) are Non-Microsoft
 > (partner MaaS) models.** Using them shares data with Fireworks AI and sends
 > it outside Microsoft systems, under different compliance/data-handling
 > rules. They are also billable pay-as-you-go for as long as they are
@@ -118,12 +118,12 @@ comparison models (`COMPARISON_MODELS`). Deploy or tear down a whole set with
 `--models`, or a single ad-hoc model with the individual flags.
 
 ```bash
-# Deploy the whole comparison set (GLM-5.2 + Kimi-K2.7-Code) at capacity 10,
+# Deploy the whole comparison set at capacity 10,
 # matching gpt-5.4's throughput for a fair comparison.
 uv run python scripts/deploy_comparison_model.py --models all --capacity 10
 
 # Deploy just one registry model
-uv run python scripts/deploy_comparison_model.py --models kimi-k2.7-code --capacity 10
+uv run python scripts/deploy_comparison_model.py --models kimi-k3 --capacity 10
 
 # List deployments on the account
 uv run python scripts/deploy_comparison_model.py --list
@@ -152,11 +152,11 @@ uv run python scripts/deploy_comparison_model.py --models all --delete
 The agent is model-agnostic: the agent definition in [`azure.yaml`](azure.yaml) reads
 `${AZURE_AI_MODEL_DEPLOYMENT_NAME}`, which `azd` substitutes from the env at
 deploy time — the model is **not** hard-coded in the YAML. To rerun the same
-FHA against GLM-5.2, override that variable and redeploy the agent:
+FHA against GLM-5.3, override that variable and redeploy the agent:
 
 ```bash
-# Swap the agent to the GLM-5.2 deployment and redeploy (no re-provision)
-azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME glm-5.2
+# Swap the agent to the GLM-5.3 deployment and redeploy (no re-provision)
+azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME glm-5.3
 azd deploy
 
 # ...run your prompts, then switch back to gpt-5.4
@@ -201,7 +201,7 @@ uv run --extra compare python scripts/run_local_codeact.py \
 
 # Keep the sandbox, write the full structured record to JSON
 uv run --extra compare python scripts/run_local_codeact.py \
-    "install cowsay and make a cow say hi" --model kimi-k2.7-code \
+    "install cowsay and make a cow say hi" --model kimi-k3 \
     --keep-sandbox --json run.json
 ```
 
@@ -217,7 +217,7 @@ uv run --extra compare python scripts/compare_models.py
 
 # Custom models + prompts, averaged over 3 repeats, paced 5s apart
 uv run --extra compare python scripts/compare_models.py \
-    --models gpt-5.4,glm-5.2,kimi-k2.7-code --repeats 3 --gap-s 5 \
+    --models gpt-5.4,glm-5.3,kimi-k3 --repeats 3 --gap-s 5 \
     --prompts my-prompts.txt --out-dir benchmark-results
 ```
 
@@ -229,12 +229,12 @@ aggregate `all_records.json`) under `--out-dir`. That folder defaults to
 
 > **Chat Completions vs Responses API (`--api`).** By default the harness calls
 > models via the **Chat Completions** API (`--api chat`), which reports token
-> usage for **every** model — including the Fireworks models (GLM-5.2,
-> Kimi-K2.7-Code), which return **zero** tokens on the Responses API. Use
+> usage for **every** model. Older Fireworks models (GLM-5.2, Kimi-K2.7-Code)
+> returned **zero** tokens on the Responses API; the current ones (GLM-5.3,
+> Kimi-K3) report tokens on both paths (checked 2026-10-10). Use
 > `--api responses` to match the deployed FHA (which uses the Responses API via
-> `ResponsesHostServer`); on that path the Fireworks models show `n/a` tokens.
-> The two paths can also differ in latency, so keep `--api` fixed within a
-> single comparison.
+> `ResponsesHostServer`). The two paths can also differ in latency, so keep
+> `--api` fixed within a single comparison.
 
 > **Model cold-starts.** The *first* inference on a freshly-deployed or idle
 > model endpoint can be far slower than steady state (we've seen a first call
@@ -408,7 +408,6 @@ telemetry isn't wired — see `infra/modules/foundry.bicep`
 fha-acas-codeact/
 ├── agent/                    # Code that ships inside the FHA container
 │   ├── main.py               # ResponsesHostServer + tool wiring
-│   ├── agent.manifest.yaml   # Foundry agent manifest (template form)
 │   ├── requirements.txt      # Human-readable dep list (source of truth)
 │   ├── requirements.lock     # Flat pinned lock (what pip installs in the image)
 │   └── Dockerfile
