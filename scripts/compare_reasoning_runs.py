@@ -52,7 +52,8 @@ def _load_records(paths: list[Path]) -> list[dict[str, Any]]:
         if path.is_file():
             files[path.resolve()] = None
         elif path.is_dir():
-            for file in sorted(path.rglob("run_*.json")):
+            # Run records are run_NNN_<model>_<repeat>.json; this skips run_meta.json.
+            for file in sorted(path.rglob("run_[0-9]*.json")):
                 files[file.resolve()] = None
         else:
             print(f"warning: path not found: {path}", file=sys.stderr)
@@ -101,7 +102,10 @@ def _shape(record: dict[str, Any]) -> tuple[Any, ...]:
     for call in calls:
         payload = str(call.get("code") or call.get("command") or "")
         for url in URL_RE.findall(payload):
-            domain = urlparse(url).netloc
+            try:
+                domain = urlparse(url).netloc
+            except ValueError:  # e.g. http://[ in generated code is not a real URL
+                continue
             if domain:
                 domains.add(domain)
     return (

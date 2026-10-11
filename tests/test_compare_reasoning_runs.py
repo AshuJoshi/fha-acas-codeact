@@ -77,6 +77,22 @@ class LoadRecordsTests(unittest.TestCase):
         self.assertIn("run_003.json", err.getvalue())
         self.assertIn("2 file(s) skipped", err.getvalue())
 
+    def test_run_meta_is_not_read_as_a_run_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "run_meta.json").write_text(json.dumps({"label": "x"}))
+            (root / "run_001_m_1.json").write_text(json.dumps(_record("m", "p")))
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                records = crr._load_records([root])
+        self.assertEqual(len(records), 1)
+        self.assertNotIn("run_meta", err.getvalue())
+
+    def test_malformed_url_in_generated_code_does_not_crash_the_summary(self):
+        record = _record("m", "p")
+        record["tool_calls"] = [{"tool": "execute_code", "code": "requests.get('http://[bad')"}]
+        (summary,) = crr._summarize([record])
+        self.assertEqual(summary["runs"], 1)
+
     def test_by_path_keeps_the_same_model_in_two_runs_apart(self):
         with tempfile.TemporaryDirectory() as tmp:
             old, new = Path(tmp) / "aug", Path(tmp) / "oct"
