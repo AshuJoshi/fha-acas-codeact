@@ -1,0 +1,5 @@
+How many prime numbers are there below 100,000?
+How many prime numbers are there below one million?
+How many prime numbers are there below 1,234,567?
+What is the remainder when 7 raised to the power 77 is divided by 1,000,003?
+Estimate how many seconds have elapsed since the Apollo 11 moon landing, as of right now.

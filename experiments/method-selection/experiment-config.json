@@ -1,0 +1,13 @@
+{
+  "model": "gpt-5.6-sol",
+  "api": "responses",
+  "reasoning_effort": "medium",
+  "gap_s": 3,
+  "repeats": 5,
+  "expectations": {
+    "How many prime numbers are there below 100,000?": "\\b9592\\b",
+    "How many prime numbers are there below one million?": "\\b78498\\b",
+    "How many prime numbers are there below 1,234,567?": "\\b95360\\b",
+    "What is the remainder when 7 raised to the power 77 is divided by 1,000,003?": "\\b51477\\b"
+  }
+}

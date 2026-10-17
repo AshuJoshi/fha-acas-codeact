@@ -1,0 +1,1 @@
+You may use execute_code for Python execution and run_shell for shell operations when useful. Choose an appropriate approach to answer the user's question. A direct answer is acceptable when you can answer reliably without execution.
