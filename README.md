@@ -399,6 +399,60 @@ coding quality offline.
 > when comparing models across different capacities. When a provider reports no
 > tokens (`n/a`), compare on wall time and turns instead.
 
+### Re-running failed runs
+
+After a long batch, `scripts/rerun_failed.py` finds the failed runs (same rule as the
+summary tool), re-runs each once with the settings in the folder's `run_meta.json`, and
+writes them to `<folder>-rerun/` with a `rerun_manifest.json` that maps every re-run to
+the original. The original folder is not modified; report the two separately.
+
+```bash
+uv run --extra compare python scripts/rerun_failed.py benchmark-results/my-run --dry-run
+uv run --extra compare python scripts/rerun_failed.py benchmark-results/my-run
+```
+
+---
+
+## Method-selection experiment
+
+`experiments/method-selection/` asks whether an execution-capable agent chooses to run
+code when the user states an outcome and not a method. It runs one model through the same
+prompts under two instruction arms, each arm in its own process with a fresh sandbox per
+run: **A** is the current CodeAct instructions verbatim; **B** drops the opening tool
+directives and the "prefer using the tools instead of answering from memory" bullet and
+says a direct answer is acceptable when the model can answer reliably. Tools, API,
+reasoning effort and prompts are identical across arms. The existing scripts, prompts and
+agent are imported, not modified.
+
+| File | Purpose |
+|---|---|
+| `run_experiment.py` | `run` (both arms, alternating per repeat), `summarize`, and a `worker` used by `run` |
+| `prompts.txt` | Five prompts: three prime counts (two memorized, one not), a modular power, and a live-clock estimate |
+| `experiment-config.json` | Default model, API, reasoning effort, pacing, repeats, and the expected answer (regex) for the four deterministic prompts |
+| `instructions-neutral.txt` | The wording that replaces the tool directives in arm B |
+| `.gitignore` | Keeps `results/` out of git |
+
+```bash
+# Both arms, 5 repeats (default model from experiment-config.json)
+uv run --extra compare python experiments/method-selection/run_experiment.py run
+
+# Another deployed model, pilot first
+uv run --extra compare python experiments/method-selection/run_experiment.py run \
+    --model kimi-k3 --repeats 1 --label pilot-kimi-k3
+
+uv run --extra compare python experiments/method-selection/run_experiment.py summarize \
+    experiments/method-selection/results/pilot-kimi-k3
+```
+
+Each run is classified as `direct` (no tool call), `execution`, `retrieval_via_code`,
+`mixed` or `blocked` from the recorded tool calls, and deterministic answers are checked
+separately from completion (`correct`). `direct` only means no tool call: a run that
+announces a plan and stops also counts as `direct`, so read those answers. `results/` is
+gitignored but reproducible: each folder holds `run_meta.json` (git commit, packages,
+settings), `deployment.json` (model, version, SKU), the exact `instructions-A/B.txt`, the
+prompts and the effective config. Output is not deterministic, so compare rates across
+repeats, not single runs.
+
 ---
 
 ## Validate the deployment
@@ -469,11 +523,14 @@ fha-acas-codeact/
 │   ├── compare_models.py          # Multi-model A/B benchmark suite
 │   ├── run_reasoning_overnight.sh # Batched long runs of a prompt suite
 │   ├── compare_reasoning_runs.py  # Per-model summary of repeated runs
+│   ├── rerun_failed.py            # Re-run a finished batch's failed runs into <folder>-rerun/
 │   ├── three_case_latency.py      # FS retention + microVM-pinning probe
 │   ├── timing_probe.py            # Cold-vs-warm latency profile
 │   ├── query_appinsights.py       # Post-deploy telemetry forensics
 │   ├── deploy_comparison_model.py # Deploy extra models (GLM-5.2, Kimi) for A/B
 │   └── grant_agent_roles.sh       # azd postdeploy hook (runtime RBAC)
+├── experiments/
+│   └── method-selection/     # Direct answer vs code: current vs neutral instructions
 ├── benchmark-results/        # Local A/B benchmark output (gitignored)
 ├── docs/
 │   ├── architecture.md
