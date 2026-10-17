@@ -15,7 +15,13 @@ every run gets a fresh ACA Sandbox, and arms alternate per repeat so time of day
 not favor one arm.
 
     uv run --extra compare python experiments/method-selection/run_experiment.py run --repeats 1
+    uv run --extra compare python experiments/method-selection/run_experiment.py run --model kimi-k3 --label kimi-k3-full
     uv run --extra compare python experiments/method-selection/run_experiment.py summarize RESULTS_DIR
+
+Reproducing a run: results/ is not tracked. Each results folder holds run_meta.json (git commit,
+packages, settings), deployment.json (model, version, SKU), the exact instructions-A/B.txt, the
+prompts and the effective config. Check out that commit, deploy the same model, and run the same
+command; model output is not deterministic, so compare rates, not individual runs.
 """
 
 from __future__ import annotations
@@ -104,7 +110,7 @@ async def _worker(args: argparse.Namespace) -> int:
     import run_local_codeact as local  # noqa: PLC0415
     from acas_toolkit import SandboxPool  # noqa: PLC0415
 
-    cfg = load_config()
+    cfg = load_config() | {"model": args.model}
     instructions = build_instructions(args.arm, local.INSTRUCTIONS, (HERE / "instructions-neutral.txt").read_text())
     local.INSTRUCTIONS = instructions
     project_endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT") or os.environ.get("FOUNDRY_PROJECT_ENDPOINT")
@@ -161,7 +167,7 @@ def _driver(args: argparse.Namespace) -> int:
     import run_local_codeact as local  # noqa: PLC0415 - also loads the azd env
     import write_run_meta  # noqa: PLC0415
 
-    cfg = load_config()
+    cfg = load_config() | ({"model": args.model} if args.model else {})
     repeats = args.repeats or cfg["repeats"]
     label = args.label or f"{datetime.now(timezone.utc):%Y-%m-%d}-{cfg['model']}"
     out = (HERE / "results" / label).resolve()
@@ -173,7 +179,7 @@ def _driver(args: argparse.Namespace) -> int:
     for arm in ARMS:
         (out / f"instructions-{arm}.txt").write_text(build_instructions(arm, local.INSTRUCTIONS, neutral))
     (out / "prompts.txt").write_text((HERE / "prompts.txt").read_text())
-    (out / "experiment-config.json").write_text((HERE / "experiment-config.json").read_text())
+    (out / "experiment-config.json").write_text(json.dumps(cfg, indent=2) + "\n")
     deployment = _deployment_info(cfg["model"])
     (out / "deployment.json").write_text(json.dumps(deployment, indent=2))
     print(f"[exp] deployment: {json.dumps(deployment)}", file=sys.stderr)
@@ -182,13 +188,16 @@ def _driver(args: argparse.Namespace) -> int:
         MODELS=cfg["model"], API=cfg["api"], EFFORT=cfg["reasoning_effort"], GAP_S=str(cfg["gap_s"]),
         REPEATS=str(repeats), BATCH_SIZE="1", PARALLEL="", PROMPTS="experiments/method-selection/prompts.txt",
     )
-    write_run_meta.main(["start", str(out), "--", "--experiment", "method-selection"])
+    write_run_meta.main(["start", str(out), "--", "--experiment", "method-selection", "--model", cfg["model"]])
 
     failed = 0
     for rep in range(1, repeats + 1):
         for arm in ARMS:
             rc = subprocess.run(
-                [sys.executable, str(Path(__file__).resolve()), "worker", "--arm", arm, "--rep", str(rep), "--out", str(out)]
+                [
+                    sys.executable, str(Path(__file__).resolve()), "worker",
+                    "--arm", arm, "--rep", str(rep), "--out", str(out), "--model", cfg["model"],
+                ]
             ).returncode
             failed += rc != 0
     write_run_meta.main(["finish", str(out), "ok" if not failed else "failed"])
@@ -228,8 +237,10 @@ def main() -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run", help="Run both arms (alternating per repeat).")
     run.add_argument("--repeats", type=int, help="Override repeats from experiment-config.json.")
+    run.add_argument("--model", help="Model deployment name. Default: model in experiment-config.json.")
     run.add_argument("--label", help="Results folder name under results/. Default: DATE-MODEL.")
     worker = sub.add_parser("worker")
+    worker.add_argument("--model", required=True)
     worker.add_argument("--arm", choices=ARMS, required=True)
     worker.add_argument("--rep", type=int, required=True)
     worker.add_argument("--out", required=True)
